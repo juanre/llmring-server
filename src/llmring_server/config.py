@@ -1,0 +1,60 @@
+from pydantic import Field, AliasChoices, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Server configuration loaded from environment variables or .env file.
+
+    Supported env vars (aliases in parentheses):
+    - LLMRING_DATABASE_URL
+    - LLMRING_DATABASE_SCHEMA
+    - LLMRING_DATABASE_POOL_SIZE
+    - LLMRING_DATABASE_POOL_OVERFLOW
+    - LLMRING_REDIS_URL
+    - LLMRING_CACHE_TTL
+    - LLMRING_API_PREFIX
+    - LLMRING_CORS_ORIGINS  (comma-separated list)
+    """
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # Database
+    database_url: str = Field(default="postgresql://localhost/llmring", validation_alias=AliasChoices("LLMRING_DATABASE_URL"))
+    database_schema: str = Field(
+        default="llmring",
+        validation_alias=AliasChoices("LLMRING_DATABASE_SCHEMA"),
+    )
+    database_pool_size: int = Field(
+        default=20,
+        validation_alias=AliasChoices("LLMRING_DATABASE_POOL_SIZE"),
+    )
+    database_pool_overflow: int = Field(
+        default=10,
+        validation_alias=AliasChoices("LLMRING_DATABASE_POOL_OVERFLOW"),
+    )
+
+    # Redis cache
+    redis_url: str = Field(default="redis://localhost:6379/0", validation_alias=AliasChoices("LLMRING_REDIS_URL"))
+    cache_ttl: int = Field(
+        default=3600,
+        validation_alias=AliasChoices("LLMRING_CACHE_TTL"),
+    )
+
+    # API Configuration
+    api_prefix: str = Field(default="/api/v1", validation_alias=AliasChoices("LLMRING_API_PREFIX"))
+    cors_origins: list[str] = Field(
+        default=["http://localhost:5173", "http://localhost:5174", "*"],
+        validation_alias=AliasChoices("LLMRING_CORS_ORIGINS"),
+    )
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _parse_cors_origins(cls, value):
+        # Support comma-separated string in env
+        if isinstance(value, str):
+            parts = [p.strip() for p in value.split(",")]
+            return [p for p in parts if p]
+        return value
+
+    # Pydantic v2: use model_config above; no inner Config class
+
+
