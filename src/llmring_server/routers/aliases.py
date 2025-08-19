@@ -66,12 +66,17 @@ async def delete_alias(request: Request, alias: str, profile: str = Query("defau
 async def bulk_upsert(
     request: Request,
     profile: str = Query("default"),
-    items: List[BindRequest] = Body(default=[]),
+    items: Optional[List[BindRequest]] = Body(default=None),
 ):
     service = AliasesService(request.app.state.db)
     project_id = request.headers.get("X-Project-Key", "default")
-    payload = [
-        {"alias": it.alias, "model": it.model, "metadata": it.metadata} for it in items
-    ]
+    payload = (
+        [
+            {"alias": it.alias, "model": it.model, "metadata": it.metadata}
+            for it in items
+        ]
+        if items
+        else []
+    )
     count = await service.bulk_upsert(project_id, profile, payload)
     return {"updated": count}

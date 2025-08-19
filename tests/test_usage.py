@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime
 
 
 PROJECT_HEADERS = {"X-Project-Key": "proj_test"}
@@ -7,23 +8,7 @@ PROJECT_HEADERS = {"X-Project-Key": "proj_test"}
 @pytest.mark.asyncio
 async def test_log_and_stats(test_app, llmring_db):
     # Ensure a model for cost calculation path
-    await llmring_db.execute(
-        """
-        INSERT INTO {{tables.llm_models}} (
-            model_name, provider, display_name, description,
-            max_context, max_output_tokens,
-            dollars_per_million_tokens_input, dollars_per_million_tokens_output
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-        """,
-        "gpt-4o-mini",
-        "openai",
-        "GPT-4o Mini",
-        "desc",
-        128000,
-        16384,
-        0.15,
-        0.60,
-    )
+    # Use live registry pricing
 
     # Log
     r = await test_app.post(
@@ -46,4 +31,3 @@ async def test_log_and_stats(test_app, llmring_db):
     assert r.status_code == 200
     stats = r.json()
     assert "summary" in stats
-

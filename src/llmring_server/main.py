@@ -99,14 +99,17 @@ async def health():
 async def receipts_public_key_pem():
     if not settings.receipts_public_key_base64:
         raise HTTPException(404, "Public key not configured")
-    # Provide a simple PEM wrapper; note base64 here is urlsafe without padding; for PEM we can present standard base64
+    # Render as PEM SubjectPublicKeyInfo
     import base64
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
     raw = settings.receipts_public_key_base64
     padding = "=" * ((4 - len(raw) % 4) % 4)
     b = base64.urlsafe_b64decode(raw + padding)
-    b64 = base64.encodebytes(b).decode().replace("\n", "\n")
-    return f"-----BEGIN PUBLIC KEY-----\n{b64}-----END PUBLIC KEY-----\n"
+    pub = Ed25519PublicKey.from_public_bytes(b)
+    pem = pub.public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)
+    return pem.decode()
 
 
 @app.get("/receipts/public-keys.json", response_class=JSONResponse)
@@ -117,7 +120,9 @@ async def receipts_public_keys_json():
         "keys": [
             {
                 "key_id": settings.receipts_key_id,
-                "public_key_base64": settings.receipts_public_key_base64,
+                "public_key_pem": (await receipts_public_key_pem()),
+                "created_at": None,
+                "retired_at": None,
             }
         ]
     }

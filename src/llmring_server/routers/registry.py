@@ -25,7 +25,7 @@ async def get_registry(
         None, description="Comma-separated list of required capabilities"
     ),
 ):
-    service = RegistryService(request.app.state.db)
+    service = RegistryService()
     # For backward compatibility, still honors version; service will ignore and fetch latest remote
     registry = await service.get_registry(version=version)
 
@@ -46,7 +46,7 @@ async def get_registry(
 async def get_registry_version(
     request: Request, version: str = Path(...), response: Response = None
 ):
-    service = RegistryService(request.app.state.db)
+    service = RegistryService()
     try:
         registry = await service.get_registry_version(version)
     except ValueError as e:

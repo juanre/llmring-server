@@ -24,7 +24,7 @@ async def log_usage(request: Request, log: UsageLogRequest) -> UsageLogResponse:
     else:
         from llmring_server.services.registry import RegistryService
 
-        registry_service = RegistryService(request.app.state.db)
+        registry_service = RegistryService()
         registry = await registry_service.get_registry()
 
         cost = 0.0

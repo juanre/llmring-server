@@ -1,39 +1,5 @@
 -- Initial schema for llmring-server (simplified, project-key based)
 
-CREATE TABLE IF NOT EXISTS {{tables.llm_models}} (
-    id SERIAL PRIMARY KEY,
-    provider VARCHAR(50) NOT NULL,
-    model_name VARCHAR(255) NOT NULL,
-    display_name VARCHAR(255),
-    description TEXT,
-    max_context INTEGER,
-    max_output_tokens INTEGER,
-    supports_vision BOOLEAN DEFAULT FALSE,
-    supports_function_calling BOOLEAN DEFAULT FALSE,
-    supports_json_mode BOOLEAN DEFAULT FALSE,
-    supports_parallel_tool_calls BOOLEAN DEFAULT FALSE,
-    tool_call_format VARCHAR(50),
-    dollars_per_million_tokens_input DECIMAL(10, 6),
-    dollars_per_million_tokens_output DECIMAL(10, 6),
-    inactive_from TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(provider, model_name)
-);
-
-CREATE INDEX idx_llm_models_provider ON {{tables.llm_models}}(provider);
-CREATE INDEX idx_llm_models_active ON {{tables.llm_models}}(inactive_from);
-CREATE INDEX idx_llm_models_provider_model ON {{tables.llm_models}}(provider, model_name);
-
-CREATE TABLE IF NOT EXISTS {{tables.registry_versions}} (
-    version VARCHAR(20) PRIMARY KEY,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    models_snapshot JSONB NOT NULL,
-    changelog JSONB,
-    signature TEXT,
-    github_release_url TEXT
-);
-
 -- Use 'project_id' instead of API key table
 CREATE TABLE IF NOT EXISTS {{tables.usage_logs}} (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -96,20 +62,5 @@ CREATE TABLE IF NOT EXISTS {{tables.receipts}} (
 CREATE INDEX idx_receipts_api_key ON {{tables.receipts}}(api_key_id);
 CREATE INDEX idx_receipts_receipt_id ON {{tables.receipts}}(receipt_id);
 
-CREATE TABLE IF NOT EXISTS {{tables.changelog}} (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    version VARCHAR(20) NOT NULL,
-    change_date DATE NOT NULL,
-    change_type VARCHAR(50) NOT NULL,
-    model VARCHAR(255),
-    field VARCHAR(100),
-    old_value TEXT,
-    new_value TEXT,
-    notes TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_changelog_version ON {{tables.changelog}}(version);
-CREATE INDEX idx_changelog_model ON {{tables.changelog}}(model);
-
+-- Registry tables removed in v3.2; registry is fetched from GitHub Pages
 
