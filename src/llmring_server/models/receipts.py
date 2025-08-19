@@ -18,8 +18,14 @@ class CostBreakdown(BaseModel):
 class Receipt(BaseModel):
     id: str
     timestamp: datetime
-    registry_version: str
+    registry_version: (
+        str  # deprecated in favor of per-provider versions; kept for compat
+    )
     model: str
+    alias: str
+    profile: str = "default"
+    lock_digest: str
+    key_id: str
     tokens: TokenUsage
     cost: CostBreakdown
     signature: str
@@ -29,8 +35,19 @@ class ReceiptRequest(BaseModel):
     receipt: Receipt
 
 
+class UnsignedReceipt(BaseModel):
+    id: str
+    timestamp: datetime
+    registry_version: str
+    model: str
+    alias: str
+    profile: str = "default"
+    lock_digest: str
+    key_id: str
+    tokens: TokenUsage
+    cost: CostBreakdown
+
+
 class ReceiptResponse(BaseModel):
     receipt_id: str
     status: str
-
-

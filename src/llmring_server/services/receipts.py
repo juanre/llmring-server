@@ -1,9 +1,14 @@
 import json
-import hashlib
 from typing import Optional
 from pgdbm import AsyncDatabaseManager
+from nacl import signing
+import base64
 
+from llmring_server.config import Settings
 from llmring_server.models.receipts import Receipt
+
+
+settings = Settings()
 
 
 class ReceiptsService:
@@ -19,8 +24,9 @@ class ReceiptsService:
         query = """
             INSERT INTO {{tables.receipts}} (
                 receipt_id, api_key_id, registry_version, model,
-                tokens, cost, signature, metadata, receipt_timestamp
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                tokens, cost, signature, metadata, receipt_timestamp,
+                alias, profile, lock_digest, key_id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             RETURNING id
         """
         await self.db.fetch_one(
@@ -34,6 +40,10 @@ class ReceiptsService:
             receipt.signature,
             json.dumps({}),
             receipt.timestamp,
+            receipt.alias,
+            receipt.profile,
+            receipt.lock_digest,
+            receipt.key_id,
         )
         return receipt.id
 
@@ -50,16 +60,64 @@ class ReceiptsService:
             timestamp=result["receipt_timestamp"],
             registry_version=result["registry_version"],
             model=result["model"],
+            alias=result.get("alias"),
+            profile=result.get("profile", "default"),
+            lock_digest=result.get("lock_digest"),
+            key_id=result.get("key_id", ""),
             tokens=json.loads(result["tokens"]),
             cost=json.loads(result["cost"]),
             signature=result["signature"],
         )
 
     def _verify_signature(self, receipt: Receipt) -> bool:
-        receipt_data = receipt.model_dump()
-        stored_sig = receipt_data.pop("signature")
-        content = json.dumps(receipt_data, sort_keys=True, default=str)
-        expected_sig = hashlib.sha256(content.encode()).hexdigest()
-        return stored_sig == expected_sig
+        try:
+            sig = receipt.signature
+            if not sig.startswith("ed25519:"):
+                return False
+            sig_b64 = sig.split(":", 1)[1]
+            # Build canonical JSON without signature field
+            data = receipt.model_dump()
+            data.pop("signature", None)
+            canonical = _canonicalize_bytes(data)
+            verify_key_b64 = (
+                settings.receipts_public_key_base64
+                if hasattr(settings, "receipts_public_key_base64")
+                else None
+            )
+            if not verify_key_b64:
+                # If no public key configured, accept for dev only
+                return False
+            verify_key = signing.VerifyKey(_b64url_decode(verify_key_b64))
+            verify_key.verify(canonical, _b64url_decode(sig_b64))
+            return True
+        except Exception:
+            return False
+
+    def issue_signature(self, payload_without_signature: dict) -> str:
+        """Sign receipt payload using Ed25519 over JCS-canonicalized JSON.
+        Returns signature string formatted as 'ed25519:<base64url>'.
+        """
+        private_key_b64 = getattr(settings, "receipts_private_key_base64", None)
+        if not private_key_b64:
+            raise RuntimeError("Signing key not configured")
+        sign_key = signing.SigningKey(_b64url_decode(private_key_b64))
+        canonical = _canonicalize_bytes(payload_without_signature)
+        signed = sign_key.sign(canonical)
+        sig = _b64url_encode(signed.signature)
+        return f"ed25519:{sig}"
 
 
+def _b64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode().rstrip("=")
+
+
+def _b64url_decode(data: str) -> bytes:
+    padding = "=" * ((4 - len(data) % 4) % 4)
+    return base64.urlsafe_b64decode(data + padding)
+
+
+def _canonicalize_bytes(obj: dict) -> bytes:
+    # Fallback canonicalization: deterministic JSON (not full RFC 8785, but stable)
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), default=str).encode(
+        "utf-8"
+    )

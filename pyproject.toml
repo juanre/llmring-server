@@ -14,7 +14,8 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.4",
     "redis>=5.0",
-    "pgdbm @ file:///Users/juanre/prj/llmring-all/pgdbm",
+    "pgdbm @ file:///Users/juanre/prj/llmring/pgdbm",
+    "pynacl>=1.5",
 ]
 
 [project.scripts]

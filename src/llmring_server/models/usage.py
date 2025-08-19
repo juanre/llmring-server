@@ -10,6 +10,8 @@ class UsageLogRequest(BaseModel):
     input_tokens: int
     output_tokens: int
     cached_input_tokens: int = 0
+    alias: Optional[str] = None
+    profile: Optional[str] = None
     cost: Optional[float] = None
     latency_ms: Optional[int] = None
     origin: Optional[str] = None
@@ -50,5 +52,3 @@ class UsageStats(BaseModel):
     by_day: List[DailyUsage]
     by_model: Dict[str, ModelUsage]
     by_origin: Dict[str, Dict[str, Any]]
-
-

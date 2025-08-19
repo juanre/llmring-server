@@ -6,6 +6,7 @@ import logging
 
 from .config import Settings
 from .database import Database
+from fastapi.responses import PlainTextResponse, JSONResponse
 
 
 logger = logging.getLogger(__name__)
@@ -75,7 +76,12 @@ app.include_router(receipts.router, dependencies=[Depends(get_project_id)])
 
 @app.get("/")
 async def root():
-    return {"name": "LLMRing Server", "version": "0.1.0", "docs": "/docs", "registry": "/registry"}
+    return {
+        "name": "LLMRing Server",
+        "version": "0.1.0",
+        "docs": "/docs",
+        "registry": "/registry",
+    }
 
 
 @app.get("/health")
@@ -89,3 +95,29 @@ async def health():
         return {"status": "unhealthy", "database": "disconnected"}
 
 
+@app.get("/receipts/public-key.pem", response_class=PlainTextResponse)
+async def receipts_public_key_pem():
+    if not settings.receipts_public_key_base64:
+        raise HTTPException(404, "Public key not configured")
+    # Provide a simple PEM wrapper; note base64 here is urlsafe without padding; for PEM we can present standard base64
+    import base64
+
+    raw = settings.receipts_public_key_base64
+    padding = "=" * ((4 - len(raw) % 4) % 4)
+    b = base64.urlsafe_b64decode(raw + padding)
+    b64 = base64.encodebytes(b).decode().replace("\n", "\n")
+    return f"-----BEGIN PUBLIC KEY-----\n{b64}-----END PUBLIC KEY-----\n"
+
+
+@app.get("/receipts/public-keys.json", response_class=JSONResponse)
+async def receipts_public_keys_json():
+    if not settings.receipts_public_key_base64 or not settings.receipts_key_id:
+        raise HTTPException(404, "Public keys not configured")
+    return {
+        "keys": [
+            {
+                "key_id": settings.receipts_key_id,
+                "public_key_base64": settings.receipts_public_key_base64,
+            }
+        ]
+    }

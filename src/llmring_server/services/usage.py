@@ -1,12 +1,18 @@
 import json
 from typing import Optional
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pgdbm import AsyncDatabaseManager
 import redis.asyncio as redis
 
 from llmring_server.config import Settings
-from llmring_server.models.usage import UsageLogRequest, UsageStats, UsageSummary, DailyUsage, ModelUsage
+from llmring_server.models.usage import (
+    UsageLogRequest,
+    UsageStats,
+    UsageSummary,
+    DailyUsage,
+    ModelUsage,
+)
 
 
 settings = Settings()
@@ -23,13 +29,15 @@ class UsageService:
         except Exception:
             pass
 
-    async def log_usage(self, api_key_id: str, log: UsageLogRequest, cost: float, timestamp: datetime) -> str:
+    async def log_usage(
+        self, api_key_id: str, log: UsageLogRequest, cost: float, timestamp: datetime
+    ) -> str:
         query = """
             INSERT INTO {{tables.usage_logs}} (
                 api_key_id, model, provider, input_tokens, output_tokens,
                 cached_input_tokens, cost, latency_ms, origin, id_at_origin,
-                created_at, metadata
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                created_at, metadata, alias, profile
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
             RETURNING id
         """
         result = await self.db.fetch_one(
@@ -46,6 +54,8 @@ class UsageService:
             log.id_at_origin,
             timestamp,
             json.dumps(log.metadata),
+            log.alias,
+            log.profile or "default",
         )
         return str(result["id"]) if result else ""
 
@@ -58,17 +68,19 @@ class UsageService:
     ) -> UsageStats:
         def _to_naive(dt: datetime) -> datetime:
             if dt.tzinfo is not None:
-                return dt.astimezone(UTC).replace(tzinfo=None)
+                return dt.astimezone(timezone.utc).replace(tzinfo=None)
             return dt
 
         if not end_date:
-            end_dt = _to_naive(datetime.now(UTC))
+            end_dt = _to_naive(datetime.now(timezone.utc))
         else:
             end_dt = _to_naive(datetime.fromisoformat(end_date.replace("Z", "+00:00")))
         if not start_date:
-            start_dt = _to_naive(datetime.now(UTC) - timedelta(days=30))
+            start_dt = _to_naive(datetime.now(timezone.utc) - timedelta(days=30))
         else:
-            start_dt = _to_naive(datetime.fromisoformat(start_date.replace("Z", "+00:00")))
+            start_dt = _to_naive(
+                datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+            )
 
         summary_query = """
             SELECT 
@@ -82,7 +94,9 @@ class UsageService:
                 AND created_at >= $2::timestamp
                 AND created_at <= $3::timestamp
         """
-        summary_result = await self.db.fetch_one(summary_query, api_key_id, start_dt, end_dt)
+        summary_result = await self.db.fetch_one(
+            summary_query, api_key_id, start_dt, end_dt
+        )
         summary = UsageSummary(
             total_requests=summary_result["total_requests"] or 0,
             total_cost=Decimal(str(summary_result["total_cost"] or 0)),
@@ -104,7 +118,9 @@ class UsageService:
             GROUP BY DATE(created_at), model
             ORDER BY DATE(created_at) DESC, COUNT(*) DESC
         """
-        daily_results = await self.db.fetch_all(daily_query, api_key_id, start_dt, end_dt)
+        daily_results = await self.db.fetch_all(
+            daily_query, api_key_id, start_dt, end_dt
+        )
         by_day = []
         current_date = None
         day_data = None
@@ -135,7 +151,9 @@ class UsageService:
                 AND created_at <= $3::timestamp
             GROUP BY model
         """
-        model_results = await self.db.fetch_all(model_query, api_key_id, start_dt, end_dt)
+        model_results = await self.db.fetch_all(
+            model_query, api_key_id, start_dt, end_dt
+        )
         by_model = {}
         for row in model_results:
             by_model[row["model"]] = ModelUsage(
@@ -157,11 +175,16 @@ class UsageService:
                 AND origin IS NOT NULL
             GROUP BY origin
         """
-        origin_results = await self.db.fetch_all(origin_query, api_key_id, start_dt, end_dt)
+        origin_results = await self.db.fetch_all(
+            origin_query, api_key_id, start_dt, end_dt
+        )
         by_origin = {}
         for row in origin_results:
-            by_origin[row["origin"]] = {"requests": row["requests"], "cost": float(row["cost"])}
+            by_origin[row["origin"]] = {
+                "requests": row["requests"],
+                "cost": float(row["cost"]),
+            }
 
-        return UsageStats(summary=summary, by_day=by_day, by_model=by_model, by_origin=by_origin)
-
-
+        return UsageStats(
+            summary=summary, by_day=by_day, by_model=by_model, by_origin=by_origin
+        )

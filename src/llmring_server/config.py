@@ -18,7 +18,10 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     # Database
-    database_url: str = Field(default="postgresql://localhost/llmring", validation_alias=AliasChoices("LLMRING_DATABASE_URL"))
+    database_url: str = Field(
+        default="postgresql://localhost/llmring",
+        validation_alias=AliasChoices("LLMRING_DATABASE_URL"),
+    )
     database_schema: str = Field(
         default="llmring",
         validation_alias=AliasChoices("LLMRING_DATABASE_SCHEMA"),
@@ -33,17 +36,39 @@ class Settings(BaseSettings):
     )
 
     # Redis cache
-    redis_url: str = Field(default="redis://localhost:6379/0", validation_alias=AliasChoices("LLMRING_REDIS_URL"))
+    redis_url: str = Field(
+        default="redis://localhost:6379/0",
+        validation_alias=AliasChoices("LLMRING_REDIS_URL"),
+    )
     cache_ttl: int = Field(
         default=3600,
         validation_alias=AliasChoices("LLMRING_CACHE_TTL"),
     )
 
     # API Configuration
-    api_prefix: str = Field(default="/api/v1", validation_alias=AliasChoices("LLMRING_API_PREFIX"))
+    api_prefix: str = Field(
+        default="/api/v1", validation_alias=AliasChoices("LLMRING_API_PREFIX")
+    )
     cors_origins: list[str] = Field(
         default=["http://localhost:5173", "http://localhost:5174", "*"],
         validation_alias=AliasChoices("LLMRING_CORS_ORIGINS"),
+    )
+
+    # Registry configuration
+    registry_base_url: str = Field(
+        default="https://llmring.github.io/registry/",
+        validation_alias=AliasChoices("LLMRING_REGISTRY_BASE_URL"),
+    )
+
+    # Receipts signing/verification keys (base64-encoded Ed25519)
+    receipts_private_key_base64: str | None = Field(
+        default=None, validation_alias=AliasChoices("LLMRING_RECEIPTS_PRIVATE_KEY_B64")
+    )
+    receipts_public_key_base64: str | None = Field(
+        default=None, validation_alias=AliasChoices("LLMRING_RECEIPTS_PUBLIC_KEY_B64")
+    )
+    receipts_key_id: str | None = Field(
+        default=None, validation_alias=AliasChoices("LLMRING_RECEIPTS_KEY_ID")
     )
 
     @field_validator("cors_origins", mode="before")
@@ -56,5 +81,3 @@ class Settings(BaseSettings):
         return value
 
     # Pydantic v2: use model_config above; no inner Config class
-
-
