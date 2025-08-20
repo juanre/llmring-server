@@ -1,10 +1,13 @@
-from pydantic import BaseModel, Field
-from typing import Optional, Dict
 from datetime import datetime
+from typing import Dict, Optional
+
+from pydantic import BaseModel, Field
 
 
 class LLMModel(BaseModel):
-    provider: str = Field(..., description="Model provider (anthropic, openai, google, ollama)")
+    provider: str = Field(
+        ..., description="Model provider (anthropic, openai, google, ollama)"
+    )
     model_name: str = Field(..., description="Model name")
     display_name: Optional[str] = None
     description: Optional[str] = None
@@ -34,5 +37,3 @@ class RegistryResponse(BaseModel):
     generated_at: datetime
     models: Dict[str, LLMModel]
     providers: Dict[str, ProviderInfo]
-
-

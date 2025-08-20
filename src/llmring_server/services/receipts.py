@@ -1,13 +1,13 @@
+import base64
 import json
 from typing import Optional
-from pgdbm import AsyncDatabaseManager
+
+import rfc8785
 from nacl import signing
-import base64
+from pgdbm import AsyncDatabaseManager
 
 from llmring_server.config import Settings
 from llmring_server.models.receipts import Receipt
-import rfc8785
-
 
 settings = Settings()
 

@@ -1,5 +1,6 @@
-import pytest
 import httpx
+import pytest
+
 import llmring_server.services.registry as registry_module
 
 
@@ -89,5 +90,3 @@ async def test_registry_parsing_v35_schema(monkeypatch, test_app):
     assert model["dollars_per_million_tokens_output"] == 10.0
     assert model["supports_json_mode"] is True
     assert model["is_active"] is True
-
-

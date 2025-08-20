@@ -1,9 +1,9 @@
+import logging
+from pathlib import Path
+from typing import Optional
+
 from pgdbm import AsyncDatabaseManager, DatabaseConfig
 from pgdbm.migrations import AsyncMigrationManager
-from typing import Optional
-from pathlib import Path
-import logging
-
 
 logger = logging.getLogger(__name__)
 
@@ -58,5 +58,3 @@ class Database:
             logger.info(f"Applied {len(result['applied'])} migrations")
 
         return result
-
-

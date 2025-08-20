@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Request, HTTPException, Query, Depends
-from typing import Optional
 from datetime import datetime
+from typing import Optional
 
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+
+from llmring_server.dependencies import get_project_id
 from llmring_server.models.usage import UsageLogRequest, UsageLogResponse, UsageStats
 from llmring_server.services.usage import UsageService
-from llmring_server.dependencies import get_project_id
-
 
 router = APIRouter(
     prefix="/api/v1",
@@ -15,7 +15,9 @@ router = APIRouter(
 
 
 @router.post("/log", response_model=UsageLogResponse)
-async def log_usage(request: Request, log: UsageLogRequest, project_id: str = Depends(get_project_id)) -> UsageLogResponse:
+async def log_usage(
+    request: Request, log: UsageLogRequest, project_id: str = Depends(get_project_id)
+) -> UsageLogResponse:
     service = UsageService(request.app.state.db)
 
     # No built-in rate limiting in core server

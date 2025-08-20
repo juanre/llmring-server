@@ -1,4 +1,4 @@
-from fastapi import Request, HTTPException
+from fastapi import HTTPException, Request
 
 
 async def get_project_id(request: Request) -> str:
@@ -11,5 +11,3 @@ async def get_project_id(request: Request) -> str:
     if not key:
         raise HTTPException(status_code=401, detail="X-Project-Key header required")
     return key
-
-

@@ -1,13 +1,13 @@
-from fastapi import FastAPI, HTTPException, Header, Depends, Request
-from fastapi.middleware.cors import CORSMiddleware
+import logging
 from contextlib import asynccontextmanager
 from typing import Optional
-import logging
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, PlainTextResponse
 
 from .config import Settings
 from .database import Database
-from fastapi.responses import PlainTextResponse, JSONResponse
-
 
 logger = logging.getLogger(__name__)
 settings = Settings()
@@ -63,8 +63,7 @@ async def get_db():
 
 
 # Routers will be imported after app and deps to avoid circulars
-from .routers import registry, usage, receipts, aliases  # noqa: E402
-
+from .routers import aliases, receipts, registry, usage  # noqa: E402
 
 app.include_router(registry.router)
 
@@ -100,8 +99,9 @@ async def receipts_public_key_pem():
         raise HTTPException(404, "Public key not configured")
     # Render as PEM SubjectPublicKeyInfo
     import base64
-    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
     raw = settings.receipts_public_key_base64
     padding = "=" * ((4 - len(raw) % 4) % 4)

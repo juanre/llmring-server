@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Request, Response, Query, Path, HTTPException
 from typing import Optional
 
-from llmring_server.services.registry import RegistryService
-from llmring_server.models.registry import RegistryResponse
+from fastapi import APIRouter, HTTPException, Path, Query, Request, Response
 
+from llmring_server.models.registry import RegistryResponse
+from llmring_server.services.registry import RegistryService
 
 router = APIRouter(
     prefix="/registry", tags=["registry"], responses={404: {"description": "Not found"}}

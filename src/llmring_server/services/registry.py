@@ -1,16 +1,12 @@
 import json
-from typing import Optional, Dict, Any, List
 from datetime import datetime
-import redis.asyncio as redis
+from typing import Any, Dict, List, Optional
+
 import httpx
+import redis.asyncio as redis
 
 from llmring_server.config import Settings
-from llmring_server.models.registry import (
-    RegistryResponse,
-    LLMModel,
-    ProviderInfo,
-)
-
+from llmring_server.models.registry import LLMModel, ProviderInfo, RegistryResponse
 
 settings = Settings()
 
@@ -69,18 +65,29 @@ class RegistryService:
                             continue
                         llm_model = LLMModel(
                             provider=info.get("provider") or provider_key,
-                            model_name=info.get("model_name") or model_key.split(":", 1)[-1],
+                            model_name=info.get("model_name")
+                            or model_key.split(":", 1)[-1],
                             display_name=info.get("display_name"),
                             description=info.get("description"),
                             max_input_tokens=info.get("max_input_tokens"),
                             max_output_tokens=info.get("max_output_tokens"),
                             supports_vision=bool(info.get("supports_vision", False)),
-                            supports_function_calling=bool(info.get("supports_function_calling", False)),
-                            supports_json_mode=bool(info.get("supports_json_mode", False)),
-                            supports_parallel_tool_calls=bool(info.get("supports_parallel_tool_calls", False)),
+                            supports_function_calling=bool(
+                                info.get("supports_function_calling", False)
+                            ),
+                            supports_json_mode=bool(
+                                info.get("supports_json_mode", False)
+                            ),
+                            supports_parallel_tool_calls=bool(
+                                info.get("supports_parallel_tool_calls", False)
+                            ),
                             tool_call_format=info.get("tool_call_format"),
-                            dollars_per_million_tokens_input=info.get("dollars_per_million_tokens_input"),
-                            dollars_per_million_tokens_output=info.get("dollars_per_million_tokens_output"),
+                            dollars_per_million_tokens_input=info.get(
+                                "dollars_per_million_tokens_input"
+                            ),
+                            dollars_per_million_tokens_output=info.get(
+                                "dollars_per_million_tokens_output"
+                            ),
                             is_active=bool(info.get("is_active", True)),
                         )
                         models[model_key] = llm_model
@@ -127,18 +134,29 @@ class RegistryService:
                             continue
                         llm_model = LLMModel(
                             provider=info.get("provider") or provider_key,
-                            model_name=info.get("model_name") or model_key.split(":", 1)[-1],
+                            model_name=info.get("model_name")
+                            or model_key.split(":", 1)[-1],
                             display_name=info.get("display_name"),
                             description=info.get("description"),
                             max_input_tokens=info.get("max_input_tokens"),
                             max_output_tokens=info.get("max_output_tokens"),
                             supports_vision=bool(info.get("supports_vision", False)),
-                            supports_function_calling=bool(info.get("supports_function_calling", False)),
-                            supports_json_mode=bool(info.get("supports_json_mode", False)),
-                            supports_parallel_tool_calls=bool(info.get("supports_parallel_tool_calls", False)),
+                            supports_function_calling=bool(
+                                info.get("supports_function_calling", False)
+                            ),
+                            supports_json_mode=bool(
+                                info.get("supports_json_mode", False)
+                            ),
+                            supports_parallel_tool_calls=bool(
+                                info.get("supports_parallel_tool_calls", False)
+                            ),
                             tool_call_format=info.get("tool_call_format"),
-                            dollars_per_million_tokens_input=info.get("dollars_per_million_tokens_input"),
-                            dollars_per_million_tokens_output=info.get("dollars_per_million_tokens_output"),
+                            dollars_per_million_tokens_input=info.get(
+                                "dollars_per_million_tokens_input"
+                            ),
+                            dollars_per_million_tokens_output=info.get(
+                                "dollars_per_million_tokens_output"
+                            ),
                             is_active=bool(info.get("is_active", True)),
                         )
                         models[model_key] = llm_model

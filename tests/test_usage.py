@@ -1,6 +1,6 @@
-import pytest
 from datetime import datetime
 
+import pytest
 
 PROJECT_HEADERS = {"X-Project-Key": "proj_test"}
 

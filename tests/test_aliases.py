@@ -1,6 +1,5 @@
 import pytest
 
-
 PROJECT_HEADERS = {"X-Project-Key": "proj_test"}
 
 
@@ -25,7 +24,9 @@ async def test_bind_list_resolve_delete_alias(test_app):
 
     # Resolve
     r = await test_app.get(
-        "/api/v1/aliases/resolve", params={"alias": "pdf_converter"}, headers=PROJECT_HEADERS
+        "/api/v1/aliases/resolve",
+        params={"alias": "pdf_converter"},
+        headers=PROJECT_HEADERS,
     )
     assert r.status_code == 200
     res = r.json()
@@ -36,4 +37,3 @@ async def test_bind_list_resolve_delete_alias(test_app):
     r = await test_app.delete("/api/v1/aliases/pdf_converter", headers=PROJECT_HEADERS)
     assert r.status_code == 200
     assert r.json()["deleted"] is True
-

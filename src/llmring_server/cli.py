@@ -1,5 +1,6 @@
-import uvicorn
 import sys
+
+import uvicorn
 
 
 def main():
@@ -14,5 +15,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
