@@ -6,6 +6,7 @@ import base64
 
 from llmring_server.config import Settings
 from llmring_server.models.receipts import Receipt
+import rfc8785
 
 
 settings = Settings()
@@ -117,7 +118,5 @@ def _b64url_decode(data: str) -> bytes:
 
 
 def _canonicalize_bytes(obj: dict) -> bytes:
-    # Fallback canonicalization: deterministic JSON (not full RFC 8785, but stable)
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), default=str).encode(
-        "utf-8"
-    )
+    # RFC 8785 JSON Canonicalization Scheme using rfc8785 lib
+    return rfc8785.dumps(obj)

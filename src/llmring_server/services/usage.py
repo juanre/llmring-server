@@ -29,9 +29,7 @@ class UsageService:
         except Exception:
             pass
 
-    async def log_usage(
-        self, api_key_id: str, log: UsageLogRequest, cost: float, timestamp: datetime
-    ) -> str:
+    async def log_usage(self, api_key_id: str, log: UsageLogRequest, cost: float, timestamp: datetime) -> str:
         query = """
             INSERT INTO {{tables.usage_logs}} (
                 api_key_id, model, provider, input_tokens, output_tokens,
@@ -94,9 +92,7 @@ class UsageService:
                 AND created_at >= $2::timestamp
                 AND created_at <= $3::timestamp
         """
-        summary_result = await self.db.fetch_one(
-            summary_query, api_key_id, start_dt, end_dt
-        )
+        summary_result = await self.db.fetch_one(summary_query, api_key_id, start_dt, end_dt)
         summary = UsageSummary(
             total_requests=summary_result["total_requests"] or 0,
             total_cost=Decimal(str(summary_result["total_cost"] or 0)),
@@ -118,9 +114,7 @@ class UsageService:
             GROUP BY DATE(created_at), model
             ORDER BY DATE(created_at) DESC, COUNT(*) DESC
         """
-        daily_results = await self.db.fetch_all(
-            daily_query, api_key_id, start_dt, end_dt
-        )
+        daily_results = await self.db.fetch_all(daily_query, api_key_id, start_dt, end_dt)
         by_day = []
         current_date = None
         day_data = None
@@ -151,9 +145,7 @@ class UsageService:
                 AND created_at <= $3::timestamp
             GROUP BY model
         """
-        model_results = await self.db.fetch_all(
-            model_query, api_key_id, start_dt, end_dt
-        )
+        model_results = await self.db.fetch_all(model_query, api_key_id, start_dt, end_dt)
         by_model = {}
         for row in model_results:
             by_model[row["model"]] = ModelUsage(
@@ -175,9 +167,7 @@ class UsageService:
                 AND origin IS NOT NULL
             GROUP BY origin
         """
-        origin_results = await self.db.fetch_all(
-            origin_query, api_key_id, start_dt, end_dt
-        )
+        origin_results = await self.db.fetch_all(origin_query, api_key_id, start_dt, end_dt)
         by_origin = {}
         for row in origin_results:
             by_origin[row["origin"]] = {

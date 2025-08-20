@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Header, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -46,12 +46,12 @@ app.add_middleware(
 )
 
 
-# Simple project-based auth
-async def get_project_id(x_project_key: Optional[str] = Header(None)) -> str:
-    """Simple project identification."""
-    if not x_project_key:
+# Require scope header (API key id) for stateful routes
+async def get_project_id(request: Request) -> str:
+    key = request.headers.get("x-project-key") or request.headers.get("X-Project-Key")
+    if not key:
         raise HTTPException(401, "X-Project-Key header required")
-    return x_project_key
+    return key
 
 
 # Dependency to inject database
@@ -65,13 +65,11 @@ async def get_db():
 from .routers import registry, usage, receipts, aliases  # noqa: E402
 
 
-# Public endpoints (no auth)
 app.include_router(registry.router)
 
-# Project-scoped endpoints
-app.include_router(usage.router, dependencies=[Depends(get_project_id)])
-app.include_router(aliases.router, dependencies=[Depends(get_project_id)])
-app.include_router(receipts.router, dependencies=[Depends(get_project_id)])
+app.include_router(usage.router)
+app.include_router(aliases.router)
+app.include_router(receipts.router)
 
 
 @app.get("/")

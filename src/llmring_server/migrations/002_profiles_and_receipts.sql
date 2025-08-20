@@ -1,22 +1,8 @@
--- Add profile support to aliases and usage; extend receipts schema
+-- Ensure profile support and indexes; extend receipts schema (idempotent)
 
 ALTER TABLE {{tables.aliases}} ADD COLUMN IF NOT EXISTS profile VARCHAR(64) NOT NULL DEFAULT 'default';
 
--- Drop old unique and add new composite unique
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1 FROM pg_indexes WHERE indexname = 'aliases_project_id_alias_key'
-    ) THEN
-        -- Attempt to drop constraint if named as such
-        BEGIN
-            ALTER TABLE {{tables.aliases}} DROP CONSTRAINT IF EXISTS aliases_project_id_alias_key;
-        EXCEPTION WHEN OTHERS THEN NULL;
-        END;
-    END IF;
-END$$;
-
--- Ensure uniqueness on (project_id, profile, alias)
+-- Ensure uniqueness on (profile, alias)
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -27,13 +13,13 @@ BEGIN
     END IF;
 END$$;
 
--- Extend receipts
+-- Extend receipts (already present in initial schema, keep idempotent)
 ALTER TABLE {{tables.receipts}} ADD COLUMN IF NOT EXISTS alias VARCHAR(128);
 ALTER TABLE {{tables.receipts}} ADD COLUMN IF NOT EXISTS profile VARCHAR(64) DEFAULT 'default';
 ALTER TABLE {{tables.receipts}} ADD COLUMN IF NOT EXISTS lock_digest VARCHAR(128);
 ALTER TABLE {{tables.receipts}} ADD COLUMN IF NOT EXISTS key_id VARCHAR(64);
 
--- Extend usage logs
+-- Extend usage logs (ensure alias/profile columns exist)
 ALTER TABLE {{tables.usage_logs}} ADD COLUMN IF NOT EXISTS alias VARCHAR(128);
 ALTER TABLE {{tables.usage_logs}} ADD COLUMN IF NOT EXISTS profile VARCHAR(64) DEFAULT 'default';
 

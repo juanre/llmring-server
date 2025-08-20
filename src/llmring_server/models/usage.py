@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from decimal import Decimal
@@ -16,7 +16,7 @@ class UsageLogRequest(BaseModel):
     latency_ms: Optional[int] = None
     origin: Optional[str] = None
     id_at_origin: Optional[str] = None
-    metadata: Dict[str, Any] = {}
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class UsageLogResponse(BaseModel):

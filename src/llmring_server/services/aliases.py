@@ -8,9 +8,7 @@ class AliasesService:
     def __init__(self, db: AsyncDatabaseManager):
         self.db = db
 
-    async def list_aliases(
-        self, project_id: str, profile: str | None = None
-    ) -> List[Alias]:
+    async def list_aliases(self, project_id: str, profile: str | None = None) -> List[Alias]:
         if profile:
             rows = await self.db.fetch_all(
                 "SELECT * FROM {{tables.aliases}} WHERE project_id = $1 AND profile = $2 ORDER BY alias",

@@ -17,7 +17,7 @@ router = APIRouter(
 async def log_usage(request: Request, log: UsageLogRequest) -> UsageLogResponse:
     service = UsageService(request.app.state.db)
 
-    # No strict rate limiting by default in this server; if Redis configured, it will be honored
+    # No built-in rate limiting in core server
     # Calculate cost if not provided
     if log.cost is not None:
         cost = log.cost

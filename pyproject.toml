@@ -16,6 +16,7 @@ dependencies = [
     "redis>=5.0",
     "pgdbm @ file:///Users/juanre/prj/llmring/pgdbm",
     "pynacl>=1.5",
+    "rfc8785>=0.1.4",
     "cryptography>=42.0.0",
 ]
 

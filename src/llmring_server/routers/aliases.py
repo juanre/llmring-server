@@ -20,9 +20,7 @@ async def bind_alias(request: Request, body: BindRequest):
     """Canonical bind endpoint per source-of-truth: bind alias->model."""
     service = AliasesService(request.app.state.db)
     project_id = request.headers.get("X-Project-Key", "default")
-    return await service.upsert_alias(
-        project_id, body.alias, body.model, body.metadata, profile=body.profile
-    )
+    return await service.upsert_alias(project_id, body.alias, body.model, body.metadata, profile=body.profile)
 
 
 @router.get("/resolve")
@@ -49,9 +47,7 @@ async def get_alias(
 async def upsert_alias(request: Request, alias: str, body: AliasRequest):
     service = AliasesService(request.app.state.db)
     project_id = request.headers.get("X-Project-Key", "default")
-    return await service.upsert_alias(
-        project_id, alias, body.model, body.metadata, profile=body.profile
-    )
+    return await service.upsert_alias(project_id, alias, body.model, body.metadata, profile=body.profile)
 
 
 @router.delete("/{alias}")

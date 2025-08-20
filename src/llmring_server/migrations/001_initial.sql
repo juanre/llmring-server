@@ -1,9 +1,8 @@
--- Initial schema for llmring-server (simplified, project-key based)
+-- Initial schema for llmring-server (projects removed per source-of-truth v3.3)
 
--- Use 'project_id' instead of API key table
 CREATE TABLE IF NOT EXISTS {{tables.usage_logs}} (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    api_key_id VARCHAR(255) NOT NULL, -- project_id in this simplified server
+    api_key_id VARCHAR(255) NOT NULL,
     model VARCHAR(255) NOT NULL,
     provider VARCHAR(50) NOT NULL,
     input_tokens INTEGER NOT NULL,
@@ -25,7 +24,7 @@ CREATE INDEX idx_usage_logs_model ON {{tables.usage_logs}}(model, created_at DES
 CREATE INDEX idx_usage_logs_api_key_profile ON {{tables.usage_logs}}(api_key_id, profile, created_at DESC);
 CREATE INDEX idx_usage_logs_alias ON {{tables.usage_logs}}(alias, created_at DESC);
 
--- Aliases per project
+-- Aliases (global, optionally profiled)
 CREATE TABLE IF NOT EXISTS {{tables.aliases}} (
     id SERIAL PRIMARY KEY,
     project_id VARCHAR(255) NOT NULL,
@@ -62,5 +61,5 @@ CREATE TABLE IF NOT EXISTS {{tables.receipts}} (
 CREATE INDEX idx_receipts_api_key ON {{tables.receipts}}(api_key_id);
 CREATE INDEX idx_receipts_receipt_id ON {{tables.receipts}}(receipt_id);
 
--- Registry tables removed in v3.2; registry is fetched from GitHub Pages
+-- Registry tables removed; registry is fetched from GitHub Pages
 
