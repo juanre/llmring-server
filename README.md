@@ -4,7 +4,7 @@ Self-hostable backend for the LLMRing project. It adds optional capabilities on 
 
 - Project-scoped alias sync (with profiles)
 - Usage logging and simple stats
-- Receipt issuance and verification (Ed25519 over deterministic JSON)
+- Receipt issuance and verification (Ed25519 over RFC 8785 JCS-canonicalized JSON)
 - Read-only access to the public model registry (proxied from GitHub Pages)
 
 This service is optional. LLMRing works fully in lockfile-only mode; run this server when you want centralized alias sync, receipts, and usage stats.
@@ -36,7 +36,6 @@ Configuration is provided via environment variables (Pydantic Settings). Key var
 - LLMRING_DATABASE_POOL_OVERFLOW: Pool overflow (default: 10)
 - LLMRING_REDIS_URL: Redis URL for caching (default: redis://localhost:6379/0)
 - LLMRING_CACHE_TTL: Cache TTL seconds (default: 3600)
-- LLMRING_API_PREFIX: API prefix (default: /api/v1)
 - LLMRING_CORS_ORIGINS: Comma-separated origins (default: http://localhost:5173,http://localhost:5174,*)
 - LLMRING_REGISTRY_BASE_URL: Base URL for the public registry (default: https://llmring.github.io/registry/)
 - LLMRING_RECEIPTS_PRIVATE_KEY_B64: Base64url Ed25519 private key (for receipt issuance)
@@ -79,7 +78,7 @@ Project-scoped (require header `X-Project-Key`):
 
 ## Receipts
 
-- Signature: Ed25519 over deterministic JSON (stable sort, compact separators)
+- Signature: Ed25519 over RFC 8785 JSON Canonicalization Scheme (JCS)
 - Signature format: `ed25519:<base64url>`
 - Receipt fields (subset):
   - `id`, `timestamp`, `model`, `alias`, `profile`, `lock_digest`, `key_id`
