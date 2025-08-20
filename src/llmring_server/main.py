@@ -13,7 +13,12 @@ logger = logging.getLogger(__name__)
 settings = Settings()
 
 # Database instance
-db = Database(settings.database_url, schema=settings.database_schema)
+db = Database(
+    settings.database_url,
+    schema=settings.database_schema,
+    min_connections=settings.database_pool_size,
+    max_connections=settings.database_pool_size + settings.database_pool_overflow,
+)
 
 
 @asynccontextmanager

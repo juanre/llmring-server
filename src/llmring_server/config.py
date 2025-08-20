@@ -45,10 +45,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LLMRING_CACHE_TTL"),
     )
 
-    # API Configuration
-    api_prefix: str = Field(
-        default="/api/v1", validation_alias=AliasChoices("LLMRING_API_PREFIX")
-    )
+    # API Configuration (prefix not used at core level; routes include their own prefixes)
     cors_origins: list[str] = Field(
         default=["http://localhost:5173", "http://localhost:5174", "*"],
         validation_alias=AliasChoices("LLMRING_CORS_ORIGINS"),

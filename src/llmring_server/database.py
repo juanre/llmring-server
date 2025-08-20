@@ -11,11 +11,22 @@ logger = logging.getLogger(__name__)
 class Database:
     """Database manager using pgdbm."""
 
-    def __init__(self, connection_string: str, schema: str = "llmring"):
-        self.config = DatabaseConfig(
-            connection_string=connection_string,
-            schema=schema,
-        )
+    def __init__(
+        self,
+        connection_string: str,
+        schema: str = "llmring",
+        min_connections: int | None = None,
+        max_connections: int | None = None,
+    ):
+        cfg_kwargs = {
+            "connection_string": connection_string,
+            "schema": schema,
+        }
+        if min_connections is not None:
+            cfg_kwargs["min_connections"] = min_connections
+        if max_connections is not None:
+            cfg_kwargs["max_connections"] = max_connections
+        self.config = DatabaseConfig(**cfg_kwargs)  # type: ignore[arg-type]
         self.db: Optional[AsyncDatabaseManager] = None
         self.migrations_path = Path(__file__).parent / "migrations"
 
