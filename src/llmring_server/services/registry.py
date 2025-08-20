@@ -2,6 +2,7 @@ import json
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 import redis.asyncio as redis
+import httpx
 
 from llmring_server.config import Settings
 from llmring_server.models.registry import (
@@ -25,8 +26,6 @@ class RegistryService:
             pass
 
     async def get_registry(self, version: Optional[str] = None) -> RegistryResponse:
-        import httpx
-
         cache_key = f"registry:{version or 'latest'}"
         if self.redis:
             try:
@@ -55,6 +54,7 @@ class RegistryService:
                 pass
 
             for provider_key in providers.keys():
+                # v3.5 registry: models are in a provider folder and also archived per version
                 url = f"{base}{provider_key}/models.json"
                 try:
                     resp = await client.get(url)
@@ -67,31 +67,21 @@ class RegistryService:
                     for model_key, info in raw_models.items():
                         if not isinstance(info, dict):
                             continue
-                        caps = info.get("capabilities") or []
                         llm_model = LLMModel(
                             provider=info.get("provider") or provider_key,
-                            model_name=info.get("model_id")
-                            or model_key.split(":", 1)[-1],
+                            model_name=info.get("model_name") or model_key.split(":", 1)[-1],
                             display_name=info.get("display_name"),
                             description=info.get("description"),
-                            max_context=info.get("context_window"),
+                            max_input_tokens=info.get("max_input_tokens"),
                             max_output_tokens=info.get("max_output_tokens"),
-                            supports_vision=("vision" in caps),
-                            supports_function_calling=(
-                                "tools" in caps or "function_calling" in caps
-                            ),
-                            supports_json_mode=("json_mode" in caps),
-                            supports_parallel_tool_calls=(
-                                "parallel_tool_calls" in caps
-                            ),
-                            tool_call_format=None,
-                            dollars_per_million_tokens_input=info.get(
-                                "input_per_million"
-                            ),
-                            dollars_per_million_tokens_output=info.get(
-                                "output_per_million"
-                            ),
-                            inactive_from=None,
+                            supports_vision=bool(info.get("supports_vision", False)),
+                            supports_function_calling=bool(info.get("supports_function_calling", False)),
+                            supports_json_mode=bool(info.get("supports_json_mode", False)),
+                            supports_parallel_tool_calls=bool(info.get("supports_parallel_tool_calls", False)),
+                            tool_call_format=info.get("tool_call_format"),
+                            dollars_per_million_tokens_input=info.get("dollars_per_million_tokens_input"),
+                            dollars_per_million_tokens_output=info.get("dollars_per_million_tokens_output"),
+                            is_active=bool(info.get("is_active", True)),
                         )
                         models[model_key] = llm_model
                 except Exception:
@@ -116,8 +106,52 @@ class RegistryService:
         return registry
 
     async def get_registry_version(self, version: str) -> RegistryResponse:
-        # v3.2: for now, return latest
-        return await self.get_registry(version)
+        # Fetch archived provider-specific versions and merge.
+        base = settings.registry_base_url.rstrip("/") + "/"
+        providers = self._get_default_providers()
+        models: Dict[str, LLMModel] = {}
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            for provider_key in providers.keys():
+                url = f"{base}{provider_key}/v/{version}/models.json"
+                try:
+                    resp = await client.get(url)
+                    if resp.status_code != 200:
+                        continue
+                    data = resp.json()
+                    raw_models = data.get("models") if isinstance(data, dict) else None
+                    if not isinstance(raw_models, dict):
+                        continue
+                    for model_key, info in raw_models.items():
+                        if not isinstance(info, dict):
+                            continue
+                        llm_model = LLMModel(
+                            provider=info.get("provider") or provider_key,
+                            model_name=info.get("model_name") or model_key.split(":", 1)[-1],
+                            display_name=info.get("display_name"),
+                            description=info.get("description"),
+                            max_input_tokens=info.get("max_input_tokens"),
+                            max_output_tokens=info.get("max_output_tokens"),
+                            supports_vision=bool(info.get("supports_vision", False)),
+                            supports_function_calling=bool(info.get("supports_function_calling", False)),
+                            supports_json_mode=bool(info.get("supports_json_mode", False)),
+                            supports_parallel_tool_calls=bool(info.get("supports_parallel_tool_calls", False)),
+                            tool_call_format=info.get("tool_call_format"),
+                            dollars_per_million_tokens_input=info.get("dollars_per_million_tokens_input"),
+                            dollars_per_million_tokens_output=info.get("dollars_per_million_tokens_output"),
+                            is_active=bool(info.get("is_active", True)),
+                        )
+                        models[model_key] = llm_model
+                except Exception:
+                    continue
+
+        registry = RegistryResponse(
+            version=str(version),
+            generated_at=datetime.now(),
+            models=models,
+            providers=providers,
+        )
+        return registry
 
     def filter_by_providers(
         self, registry: RegistryResponse, providers: List[str]

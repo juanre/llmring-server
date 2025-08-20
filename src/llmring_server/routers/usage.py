@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Request, HTTPException, Query
+from fastapi import APIRouter, Request, HTTPException, Query, Depends
 from typing import Optional
 from datetime import datetime
 
 from llmring_server.models.usage import UsageLogRequest, UsageLogResponse, UsageStats
 from llmring_server.services.usage import UsageService
+from llmring_server.dependencies import get_project_id
 
 
 router = APIRouter(
@@ -14,7 +15,7 @@ router = APIRouter(
 
 
 @router.post("/log", response_model=UsageLogResponse)
-async def log_usage(request: Request, log: UsageLogRequest) -> UsageLogResponse:
+async def log_usage(request: Request, log: UsageLogRequest, project_id: str = Depends(get_project_id)) -> UsageLogResponse:
     service = UsageService(request.app.state.db)
 
     # No built-in rate limiting in core server
@@ -51,7 +52,6 @@ async def log_usage(request: Request, log: UsageLogRequest) -> UsageLogResponse:
                 )
 
     timestamp = datetime.now()
-    project_id = request.headers.get("X-Project-Key", "default")
     log_id = await service.log_usage(project_id, log, cost, timestamp)
 
     return UsageLogResponse(log_id=str(log_id), cost=cost, timestamp=timestamp)
@@ -65,9 +65,9 @@ async def get_stats(
     group_by: str = Query(
         "day", description="Group results by time period", enum=["day", "week", "month"]
     ),
+    project_id: str = Depends(get_project_id),
 ):
     service = UsageService(request.app.state.db)
-    project_id = request.headers.get("X-Project-Key", "default")
     return await service.get_stats(
         api_key_id=project_id,
         start_date=start_date,

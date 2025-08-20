@@ -119,4 +119,5 @@ def _b64url_decode(data: str) -> bytes:
 
 def _canonicalize_bytes(obj: dict) -> bytes:
     # RFC 8785 JSON Canonicalization Scheme using rfc8785 lib
-    return rfc8785.dumps(obj)
+    out = rfc8785.dumps(obj)
+    return out.encode("utf-8") if isinstance(out, str) else out

@@ -1,17 +1,16 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 from datetime import datetime
-from decimal import Decimal
 
 
 class LLMModel(BaseModel):
-    id: Optional[int] = None
     provider: str = Field(..., description="Model provider (anthropic, openai, google, ollama)")
     model_name: str = Field(..., description="Model name")
     display_name: Optional[str] = None
     description: Optional[str] = None
 
-    max_context: Optional[int] = Field(None, description="Maximum context length")
+    # v3.5 naming
+    max_input_tokens: Optional[int] = Field(None, description="Maximum input tokens")
     max_output_tokens: Optional[int] = Field(None, description="Maximum output tokens")
     supports_vision: bool = False
     supports_function_calling: bool = False
@@ -19,12 +18,9 @@ class LLMModel(BaseModel):
     supports_parallel_tool_calls: bool = False
     tool_call_format: Optional[str] = None
 
-    dollars_per_million_tokens_input: Optional[Decimal] = Field(None)
-    dollars_per_million_tokens_output: Optional[Decimal] = Field(None)
-
-    inactive_from: Optional[datetime] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    dollars_per_million_tokens_input: Optional[float] = Field(None)
+    dollars_per_million_tokens_output: Optional[float] = Field(None)
+    is_active: bool = True
 
 
 class ProviderInfo(BaseModel):

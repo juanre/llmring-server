@@ -51,12 +51,8 @@ app.add_middleware(
 )
 
 
-# Require scope header (API key id) for stateful routes
-async def get_project_id(request: Request) -> str:
-    key = request.headers.get("x-project-key") or request.headers.get("X-Project-Key")
-    if not key:
-        raise HTTPException(401, "X-Project-Key header required")
-    return key
+# Keep only app setup here; enforce the project header via a shared dependency
+from .dependencies import get_project_id  # noqa: E402
 
 
 # Dependency to inject database
