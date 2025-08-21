@@ -41,12 +41,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS for self-hosting
+# CORS for self-hosting (restrict in production; '*' is acceptable for local dev)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["X-Project-Key", "Content-Type", "If-None-Match"],
 )
 
 

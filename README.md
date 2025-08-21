@@ -50,6 +50,11 @@ Minimal required: set `LLMRING_DATABASE_URL` to a reachable Postgres instance. I
 - No user management in this service
 - The same project can carry separate alias bindings by profile (e.g., `dev`, `prod`).
 
+Security notes:
+- The `X-Project-Key` must be treated as a secret. Do not expose it publicly.
+- The server validates the header is present, non-empty, below 256 chars, and without whitespace.
+- In production, set narrow `LLMRING_CORS_ORIGINS` (avoid `*`) and deploy behind TLS.
+
 ## Endpoints
 
 Public:
@@ -75,6 +80,10 @@ Project-scoped (require header `X-Project-Key`):
   - POST `/` store a signed receipt `{ receipt: {...} }` (server verifies signature)
   - GET `/{receipt_id}` fetch stored receipt
   - POST `/issue` issue a signed receipt from an unsigned payload (requires configured signing key)
+
+Security notes:
+- Stats and logs are key-scoped; ensure you send the right project header to avoid data leakage across projects.
+- Receipts verification requires `LLMRING_RECEIPTS_PUBLIC_KEY_B64` to be configured; otherwise signatures are rejected.
 
 ## Receipts
 
@@ -110,22 +119,12 @@ The project uses:
 - redis (optional) for caching
 - cryptography + pynacl for receipts
 
-## Publishing
+# Security Checklist
 
-This project uses Hatchling. To build and publish (ensure `pgdbm` dependency is available on PyPI):
+- [ ] Set `LLMRING_CORS_ORIGINS` to explicit origins (not `*`) in production
+- [ ] Serve behind TLS (reverse proxy like nginx or cloud load balancer)
+- [ ] Store and rotate `X-Project-Key` values securely; consider per-env keys
+- [ ] Configure `LLMRING_RECEIPTS_PUBLIC_KEY_B64` and `LLMRING_RECEIPTS_PRIVATE_KEY_B64` for receipts
+- [ ] Restrict egress if running in sensitive environments; registry fetches use outbound HTTP
+- [ ] Enable Redis with authentication (set `LLMRING_REDIS_URL`) if caching is needed
 
-```bash
-# Build wheel
-uv build
-
-# Publish to PyPI (requires credentials)
-uv publish --trusted-publish
-```
-
-Remember to bump `version` in `pyproject.toml` and tag the release.
-
-## Notes
-
-- This server is optional; the lockfile-only client works without it.
-- Profiles let you maintain different alias→model bindings per environment.
-- Keep `X-Project-Key` secret; it scopes writes and reads to a project.
