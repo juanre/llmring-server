@@ -18,6 +18,8 @@ dependencies = [
     "pynacl>=1.5",
     "rfc8785>=0.1.4",
     "cryptography>=42.0.0",
+    "click>=8.1.0",
+    "asyncpg>=0.29",
 ]
 
 [project.license]
