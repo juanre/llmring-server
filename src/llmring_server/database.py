@@ -18,15 +18,12 @@ class Database:
         min_connections: int | None = None,
         max_connections: int | None = None,
     ):
-        cfg_kwargs = {
-            "connection_string": connection_string,
-            "schema": schema,
-        }
-        if min_connections is not None:
-            cfg_kwargs["min_connections"] = min_connections
-        if max_connections is not None:
-            cfg_kwargs["max_connections"] = max_connections
-        self.config = DatabaseConfig(**cfg_kwargs)  # type: ignore[arg-type]
+        self.config = DatabaseConfig(
+            connection_string=connection_string,
+            schema=schema,
+            min_connections=min_connections or 10,
+            max_connections=max_connections or 20,
+        )
         self.db: Optional[AsyncDatabaseManager] = None
         self.migrations_path = Path(__file__).parent / "migrations"
 

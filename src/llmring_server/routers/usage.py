@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 
 from llmring_server.dependencies import get_project_id
 from llmring_server.models.usage import UsageLogRequest, UsageLogResponse, UsageStats

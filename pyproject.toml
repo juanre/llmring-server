@@ -1,7 +1,7 @@
 [project]
 name = "llmring-server"
 version = "0.1.0"
-description = "Add your description here"
+description = "LLMRing core server: alias sync, receipts, and usage logging (key-scoped, no users)"
 readme = "README.md"
 authors = [
     { name = "Juan Reyero", email = "juan@juanreyero.com" }
@@ -14,10 +14,28 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.4",
     "redis>=5.0",
-    "pgdbm @ file:///Users/juanre/prj/llmring/pgdbm",
+    "pgdbm>=0.1.0",
     "pynacl>=1.5",
     "rfc8785>=0.1.4",
     "cryptography>=42.0.0",
+]
+
+[project.license]
+text = "MIT"
+
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Framework :: FastAPI",
+  "Framework :: AsyncIO",
+  "Topic :: Internet :: WWW/HTTP",
+  "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
 [project.scripts]
@@ -30,6 +48,15 @@ build-backend = "hatchling.build"
 [tool.hatch.metadata]
 allow-direct-references = true
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/llmring_server"]
+
+[tool.hatch.build]
+include = [
+  "src/llmring_server/migrations/*.sql",
+  "src/llmring_server/py.typed",
+]
+
 [dependency-groups]
 dev = [
     "black>=25.1.0",
@@ -39,3 +66,12 @@ dev = [
     "pytest-asyncio>=1.1.0",
     "ruff>=0.12.9",
 ]
+
+[project.urls]
+Homepage = "https://llmring.ai"
+Documentation = "https://github.com/juanre/llmring/tree/main/llmring-server"
+Repository = "https://github.com/juanre/llmring"
+Issues = "https://github.com/juanre/llmring/issues"
+
+[tool.uv.sources]
+pgdbm = { path = "../pgdbm" }

@@ -97,12 +97,18 @@ class UsageService:
         summary_result = await self.db.fetch_one(
             summary_query, api_key_id, start_dt, end_dt
         )
+        # Guard against None result rows for mypy
+        tr = int(summary_result["total_requests"]) if summary_result and summary_result["total_requests"] is not None else 0
+        tc = Decimal(str(summary_result["total_cost"])) if summary_result and summary_result["total_cost"] is not None else Decimal("0")
+        tt = int(summary_result["total_tokens"]) if summary_result and summary_result["total_tokens"] is not None else 0
+        um = int(summary_result["unique_models"]) if summary_result and summary_result["unique_models"] is not None else 0
+        uo = int(summary_result["unique_origins"]) if summary_result and summary_result["unique_origins"] is not None else 0
         summary = UsageSummary(
-            total_requests=summary_result["total_requests"] or 0,
-            total_cost=Decimal(str(summary_result["total_cost"] or 0)),
-            total_tokens=summary_result["total_tokens"] or 0,
-            unique_models=summary_result["unique_models"] or 0,
-            unique_origins=summary_result["unique_origins"] or 0,
+            total_requests=tr,
+            total_cost=tc,
+            total_tokens=tt,
+            unique_models=um,
+            unique_origins=uo,
         )
 
         daily_query = """

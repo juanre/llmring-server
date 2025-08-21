@@ -1,6 +1,6 @@
 # LLMRing Server
 
-Self-hostable backend for the LLMRing project. It adds optional capabilities on top of the lockfile-only workflow:
+Self-hostable backend for the LLMRing project. It adds optional capabilities on top of the lockfile-only workflow, aligned with source-of-truth v3.5:
 
 - Project-scoped alias sync (with profiles)
 - Usage logging and simple stats
@@ -109,6 +109,20 @@ The project uses:
 - httpx for outbound HTTP
 - redis (optional) for caching
 - cryptography + pynacl for receipts
+
+## Publishing
+
+This project uses Hatchling. To build and publish (ensure `pgdbm` dependency is available on PyPI):
+
+```bash
+# Build wheel
+uv build
+
+# Publish to PyPI (requires credentials)
+uv publish --trusted-publish
+```
+
+Remember to bump `version` in `pyproject.toml` and tag the release.
 
 ## Notes
 

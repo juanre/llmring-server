@@ -1,8 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
-from typing import Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 
@@ -52,7 +51,6 @@ app.add_middleware(
 
 
 # Keep only app setup here; enforce the project header via a shared dependency
-from .dependencies import get_project_id  # noqa: E402
 
 
 # Dependency to inject database

@@ -1,7 +1,5 @@
-import httpx
 import pytest
 
-import llmring_server.services.registry as registry_module
 
 
 @pytest.mark.asyncio

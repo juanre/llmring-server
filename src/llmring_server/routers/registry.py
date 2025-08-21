@@ -44,13 +44,12 @@ async def get_registry(
 
 @router.get("/v/{version}/registry.json", response_model=RegistryResponse)
 async def get_registry_version(
-    request: Request, version: str = Path(...), response: Response = None
+    request: Request, response: Response, version: str = Path(...)
 ):
     service = RegistryService()
     try:
         registry = await service.get_registry_version(version)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    if response is not None:
-        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     return registry
