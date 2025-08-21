@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, Path, Request
+from fastapi import APIRouter, Depends, HTTPException, Path
+from pgdbm import AsyncDatabaseManager
 
-from llmring_server.dependencies import get_project_id
+from llmring_server.dependencies import get_project_id, get_db
 from llmring_server.models.receipts import (
     Receipt,
     ReceiptRequest,
@@ -14,11 +15,11 @@ router = APIRouter(prefix="/api/v1/receipts", tags=["receipts"])
 
 @router.post("/", response_model=ReceiptResponse)
 async def store_receipt(
-    request: Request,
     receipt_request: ReceiptRequest,
     api_key_id: str = Depends(get_project_id),
+    db: AsyncDatabaseManager = Depends(get_db),
 ):
-    service = ReceiptsService(request.app.state.db)
+    service = ReceiptsService(db)
     try:
         receipt_id = await service.store_receipt(
             api_key_id=api_key_id, receipt=receipt_request.receipt
@@ -30,11 +31,11 @@ async def store_receipt(
 
 @router.get("/{receipt_id}", response_model=Receipt)
 async def get_receipt(
-    request: Request,
     receipt_id: str = Path(..., description="The receipt ID to retrieve"),
     api_key_id: str = Depends(get_project_id),
+    db: AsyncDatabaseManager = Depends(get_db),
 ):
-    service = ReceiptsService(request.app.state.db)
+    service = ReceiptsService(db)
     receipt = await service.get_receipt(receipt_id, api_key_id)
     if not receipt:
         raise HTTPException(status_code=404, detail="Receipt not found")
@@ -42,11 +43,14 @@ async def get_receipt(
 
 
 @router.post("/issue", response_model=Receipt)
-async def issue_receipt(request: Request, receipt: UnsignedReceipt):
+async def issue_receipt(
+    receipt: UnsignedReceipt,
+    db: AsyncDatabaseManager = Depends(get_db),
+):
     """Issue a signed receipt. Expects receipt without signature; returns with signature set.
     Requires server to have a configured signing key.
     """
-    service = ReceiptsService(request.app.state.db)
+    service = ReceiptsService(db)
     # Remove signature if provided
     payload = receipt.model_dump()
     payload.pop("signature", None)

@@ -8,7 +8,6 @@ from pgdbm import AsyncDatabaseManager
 from pgdbm.fixtures.conftest import test_db_factory  # noqa: F401
 
 from llmring_server.config import Settings
-from llmring_server.database import Database
 from llmring_server.main import create_app
 
 
@@ -40,7 +39,8 @@ async def dual_mode_app(request, test_db_factory):
         app = create_app(
             db_manager=external_db,
             schema="llmring_lib",
-            settings=settings
+            settings=settings,
+            standalone=False,  # Library mode
         )
         
         # Store mode for tests
@@ -52,55 +52,6 @@ async def dual_mode_app(request, test_db_factory):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client, mode
-
-
-@pytest_asyncio.fixture
-async def standalone_database(test_db_factory):
-    """Test database in standalone mode."""
-    # Create a test database first
-    test_db_manager = await test_db_factory.create_db(
-        suffix="standalone",
-        schema="test_schema"
-    )
-    
-    # Get connection string from the test database manager's config
-    # If connection_string is None, build it from the config parts
-    if test_db_manager.config.connection_string:
-        connection_string = test_db_manager.config.connection_string
-    else:
-        cfg = test_db_manager.config
-        connection_string = f"postgresql://{cfg.user}@{cfg.host}:{cfg.port}/{cfg.database}"
-    
-    # Create standalone database instance with same connection string
-    db = Database(
-        connection_string=connection_string,
-        schema="test_schema"
-    )
-    await db.connect()
-    
-    try:
-        yield db
-    finally:
-        await db.disconnect()
-
-
-@pytest_asyncio.fixture
-async def library_database(test_db_factory):
-    """Test database in library mode with external connection."""
-    external_db = await test_db_factory.create_db(
-        suffix="library_db",
-        schema="test_lib"
-    )
-    
-    db = Database(
-        db_manager=external_db,
-        schema="test_lib"
-    )
-    await db.connect()  # Should be no-op for library mode
-    
-    yield db
-    
-    # No disconnect needed - external db handles it
 
 
 @pytest.mark.asyncio
@@ -151,41 +102,6 @@ async def test_dual_mode_registry_endpoint(dual_mode_app):
 
 
 @pytest.mark.asyncio
-async def test_database_standalone_mode(standalone_database):
-    """Test database operations in standalone mode."""
-    db = standalone_database
-    
-    # Should have its own connection
-    assert db._external_db is False
-    assert db.db is not None
-    
-    # Test a simple query
-    result = await db.db.fetch_one("SELECT 1 as value")
-    assert result["value"] == 1
-
-
-@pytest.mark.asyncio
-async def test_database_library_mode(library_database):
-    """Test database operations in library mode."""
-    db = library_database
-    
-    # Should use external connection
-    assert db._external_db is True
-    assert db.db is not None
-    
-    # Test a simple query
-    result = await db.db.fetch_one("SELECT 1 as value")
-    assert result["value"] == 1
-
-
-@pytest.mark.asyncio
-async def test_database_mode_validation():
-    """Test that database requires either connection string or db_manager."""
-    with pytest.raises(ValueError, match="Either connection_string or db_manager required"):
-        Database()
-
-
-@pytest.mark.asyncio
 async def test_create_app_with_custom_settings(monkeypatch):
     """Test creating app with custom settings."""
     # Use environment variables for Settings
@@ -198,9 +114,7 @@ async def test_create_app_with_custom_settings(monkeypatch):
     app = create_app(settings=settings)
     
     # Check that settings were applied
-    assert app.state._settings_instance == settings
-    # Check that the database instance was created with the custom schema
-    assert app.state._database_instance.schema == "custom_schema"
+    assert app.state.settings == settings
 
 
 @pytest.mark.asyncio
@@ -214,13 +128,13 @@ async def test_create_app_with_external_db(test_db_factory):
     app = create_app(
         db_manager=external_db,
         schema="external_schema",
-        run_migrations=False  # Skip migrations for this test
+        run_migrations=False,  # Skip migrations for this test
+        standalone=False,
     )
     
-    # Check that external db was used
-    # Note: external_db is set in lifespan, not immediately available
-    assert app.state._database_instance._external_db is True
-    assert app.state._database_instance.schema == "external_schema"
+    # Check that external db was used (set in non-standalone mode)
+    assert app.state.external_db is True
+    assert app.state.db == external_db
 
 
 @pytest.mark.asyncio
@@ -234,12 +148,12 @@ async def test_create_app_migration_control(run_migrations, test_db_factory):
     
     app = create_app(
         db_manager=external_db,
-        run_migrations=run_migrations
+        run_migrations=run_migrations,
+        standalone=False,
     )
     
     # This test verifies the parameter is accepted
-    # Actual migration verification would need more setup
-    assert app.state._database_instance._external_db is True
+    assert app.state.external_db is True
 
 
 @pytest.mark.asyncio
@@ -260,7 +174,8 @@ async def test_both_modes_share_api_interface(test_db_factory):
     )
     library_app = create_app(
         db_manager=external_db,
-        schema="library"
+        schema="library",
+        standalone=False,
     )
     
     # Both should have the same routes
@@ -275,3 +190,39 @@ async def test_both_modes_share_api_interface(test_db_factory):
     for pattern in expected_patterns:
         found = any(route.startswith(pattern) for route in standalone_routes)
         assert found, f"Pattern {pattern} not found in routes"
+
+
+@pytest.mark.asyncio
+async def test_include_meta_routes_parameter(test_db_factory):
+    """Test that include_meta_routes parameter controls root/health endpoints."""
+    external_db = await test_db_factory.create_db(
+        suffix="meta_routes_test",
+        schema="test_schema"
+    )
+    
+    # Create app with meta routes
+    app_with_meta = create_app(
+        db_manager=external_db,
+        standalone=False,
+        include_meta_routes=True,
+    )
+    
+    # Create app without meta routes
+    app_without_meta = create_app(
+        db_manager=external_db,
+        standalone=False,
+        include_meta_routes=False,
+    )
+    
+    with_meta_routes = {route.path for route in app_with_meta.routes}
+    without_meta_routes = {route.path for route in app_without_meta.routes}
+    
+    # Root and health should be in with_meta but not without_meta
+    assert "/" in with_meta_routes
+    assert "/health" in with_meta_routes
+    assert "/" not in without_meta_routes
+    assert "/health" not in without_meta_routes
+    
+    # Other routes should be the same
+    assert "/api/v1/aliases/bind" in with_meta_routes
+    assert "/api/v1/aliases/bind" in without_meta_routes

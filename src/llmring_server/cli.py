@@ -10,7 +10,6 @@ from pgdbm import AsyncDatabaseManager, AsyncMigrationManager, DatabaseConfig
 from pgdbm.testing import AsyncTestDatabase, DatabaseTestConfig
 
 from .config import Settings
-from .database import Database
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

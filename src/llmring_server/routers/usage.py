@@ -1,9 +1,10 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
+from pgdbm import AsyncDatabaseManager
 
-from llmring_server.dependencies import get_project_id
+from llmring_server.dependencies import get_project_id, get_db
 from llmring_server.models.usage import UsageLogRequest, UsageLogResponse, UsageStats
 from llmring_server.services.usage import UsageService
 
@@ -16,9 +17,11 @@ router = APIRouter(
 
 @router.post("/log", response_model=UsageLogResponse)
 async def log_usage(
-    request: Request, log: UsageLogRequest, project_id: str = Depends(get_project_id)
+    log: UsageLogRequest, 
+    project_id: str = Depends(get_project_id),
+    db: AsyncDatabaseManager = Depends(get_db),
 ) -> UsageLogResponse:
-    service = UsageService(request.app.state.db)
+    service = UsageService(db)
 
     # No built-in rate limiting in core server
     # Calculate cost if not provided
@@ -61,15 +64,15 @@ async def log_usage(
 
 @router.get("/stats", response_model=UsageStats)
 async def get_stats(
-    request: Request,
     start_date: Optional[str] = Query(None, description="Start date in ISO format"),
     end_date: Optional[str] = Query(None, description="End date in ISO format"),
     group_by: str = Query(
         "day", description="Group results by time period", enum=["day", "week", "month"]
     ),
     project_id: str = Depends(get_project_id),
+    db: AsyncDatabaseManager = Depends(get_db),
 ):
-    service = UsageService(request.app.state.db)
+    service = UsageService(db)
     return await service.get_stats(
         api_key_id=project_id,
         start_date=start_date,
