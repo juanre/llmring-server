@@ -1,6 +1,6 @@
 # LLMRing Server
 
-Self-hostable backend for the LLMRing project. It adds optional capabilities on top of the lockfile-only workflow, aligned with source-of-truth v3.5:
+Self-hostable backend for the LLMRing project. It adds optional capabilities on top of the lockfile-only workflow.
 
 - Project-scoped alias sync (with profiles)
 - Usage logging and simple stats
@@ -54,6 +54,9 @@ Security notes:
 - The `X-Project-Key` must be treated as a secret. Do not expose it publicly.
 - The server validates the header is present, non-empty, below 256 chars, and without whitespace.
 - In production, set narrow `LLMRING_CORS_ORIGINS` (avoid `*`) and deploy behind TLS.
+
+SaaS integration note:
+- When the SaaS (`llmring-api`) calls this core server, it maps `X-API-Key` from clients to a scoped `X-Project-Key` forwarded to this service.
 
 ## Endpoints
 
