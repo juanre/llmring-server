@@ -8,7 +8,6 @@ from pathlib import Path
 
 from pgdbm import AsyncDatabaseManager, AsyncMigrationManager
 
-from .services.aliases import AliasesService
 from .services.usage import UsageService
 from .services.receipts import ReceiptsService
 from .services.registry import RegistryService
@@ -32,7 +31,6 @@ class LLMRingService:
         self._run_migrations = run_migrations
         
         # Initialize services
-        self.aliases = AliasesService(db)
         self.usage = UsageService(db)
         self.receipts = ReceiptsService(db)
         self.registry = RegistryService()
@@ -77,7 +75,6 @@ class LLMRingService:
             "status": "healthy" if db_status == "healthy" else "degraded",
             "database": db_status,
             "services": {
-                "aliases": "ready",
                 "usage": "ready",
                 "receipts": "ready",
                 "registry": "ready",

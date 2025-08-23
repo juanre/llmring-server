@@ -191,6 +191,32 @@ class UsageService:
                 "cost": float(row["cost"]),
             }
 
+        alias_query = """
+            SELECT 
+                alias,
+                COUNT(*) as requests,
+                COALESCE(SUM(cost), 0) as cost,
+                COALESCE(SUM(input_tokens), 0) as input_tokens,
+                COALESCE(SUM(output_tokens), 0) as output_tokens
+            FROM {{tables.usage_logs}}
+            WHERE api_key_id = $1
+                AND created_at >= $2::timestamp
+                AND created_at <= $3::timestamp
+                AND alias IS NOT NULL
+            GROUP BY alias
+        """
+        alias_results = await self.db.fetch_all(
+            alias_query, api_key_id, start_dt, end_dt
+        )
+        by_alias = {}
+        for row in alias_results:
+            by_alias[row["alias"]] = ModelUsage(
+                requests=row["requests"],
+                cost=Decimal(str(row["cost"])),
+                input_tokens=row["input_tokens"],
+                output_tokens=row["output_tokens"],
+            )
+
         return UsageStats(
-            summary=summary, by_day=by_day, by_model=by_model, by_origin=by_origin
+            summary=summary, by_day=by_day, by_model=by_model, by_origin=by_origin, by_alias=by_alias
         )

@@ -54,7 +54,7 @@ The CLI remains unchanged and continues to support standalone operation with tes
 
 Comprehensive tests verify both modes work correctly:
 
-- **Dual-mode fixture**: Tests all endpoints in both standalone and library modes
+- **Dual-mode fixture**: Tests core endpoints in both standalone and library modes
 - **Database tests**: Verify database operations work in both modes
 - **Configuration tests**: Ensure custom settings and external databases work
 - **API consistency**: Verifies both modes expose the same API interface

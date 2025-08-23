@@ -53,3 +53,4 @@ class UsageStats(BaseModel):
     by_day: List[DailyUsage]
     by_model: Dict[str, ModelUsage]
     by_origin: Dict[str, Dict[str, Any]]
+    by_alias: Dict[str, ModelUsage]

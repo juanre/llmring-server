@@ -186,7 +186,7 @@ async def test_both_modes_share_api_interface(test_db_factory):
     
     # Key route patterns should exist in both
     # Some are exact, some are prefixes
-    expected_patterns = ["/", "/health", "/registry", "/api/v1/log", "/api/v1/stats", "/api/v1/aliases"]
+    expected_patterns = ["/", "/health", "/registry", "/api/v1/log", "/api/v1/stats"]
     for pattern in expected_patterns:
         found = any(route.startswith(pattern) for route in standalone_routes)
         assert found, f"Pattern {pattern} not found in routes"
@@ -224,5 +224,3 @@ async def test_include_meta_routes_parameter(test_db_factory):
     assert "/health" not in without_meta_routes
     
     # Other routes should be the same
-    assert "/api/v1/aliases/bind" in with_meta_routes
-    assert "/api/v1/aliases/bind" in without_meta_routes

@@ -2,12 +2,11 @@
 
 Self-hostable backend for the LLMRing project. It adds optional capabilities on top of the lockfile-only workflow.
 
-- Project-scoped alias sync (with profiles)
 - Usage logging and simple stats
 - Receipt issuance and verification (Ed25519 over RFC 8785 JCS-canonicalized JSON)
 - Read-only access to the public model registry (proxied from GitHub Pages)
 
-This service is optional. LLMRing works fully in lockfile-only mode; run this server when you want centralized alias sync, receipts, and usage stats.
+This service is optional. LLMRing works fully in lockfile-only mode; run this server when you want centralized receipts and usage stats.
 
 ## Quick start
 
@@ -48,7 +47,7 @@ Minimal required: set `LLMRING_DATABASE_URL` to a reachable Postgres instance. I
 
 - Project-scoped via `X-Project-Key` header
 - No user management in this service
-- The same project can carry separate alias bindings by profile (e.g., `dev`, `prod`).
+-- Aliases are local to each codebase in its lockfile; the server only logs the alias label used.
 
 Security notes:
 - The `X-Project-Key` must be treated as a secret. Do not expose it publicly.
@@ -68,14 +67,6 @@ Public:
 - GET `/receipts/public-keys.json` → list of available public keys
 
 Project-scoped (require header `X-Project-Key`):
-- Aliases (`/api/v1/aliases/...`)
-  - GET `/` → list aliases (optional `?profile=`)
-  - POST `/bind` → `{ alias, model, profile?, metadata? }`
-  - GET `/resolve?alias=NAME&profile=default` → `{ alias, model }`
-  - GET `/{alias}?profile=default`
-  - PUT `/{alias}` → `{ model, profile?, metadata? }`
-  - DELETE `/{alias}?profile=default`
-  - POST `/bulk_upsert?profile=default` → body: `[ { alias, model, metadata? }, ... ]`
 - Usage (`/api/v1/log`, `/api/v1/stats`)
   - POST `/api/v1/log` → `{ provider, model, input_tokens, output_tokens, cached_input_tokens?, alias?, profile?, cost? }`
   - GET `/api/v1/stats?start_date=&end_date=&group_by=day`

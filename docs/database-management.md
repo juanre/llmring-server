@@ -117,7 +117,7 @@ This ensures:
 ## Migration Files
 
 Migrations are stored in `src/llmring_server/migrations/`:
-- `001_initial.sql`: Core tables (aliases, usage logs)
+- `001_initial.sql`: Core tables (usage logs, receipts)
 - `002_profiles_and_receipts.sql`: Profiles and receipts support
 
 Migration naming convention:
@@ -130,10 +130,8 @@ Migration naming convention:
 The server uses a key-scoped architecture (no user management):
 
 ### Core Tables
-- `aliases`: Model alias bindings per API key
-- `usage_logs`: Request/response tracking
-- `receipts`: Signed usage receipts
-- `registry_cache`: Model registry cache with ETags
+- `usage_logs`: Request/response tracking (includes optional `alias` string and `profile`)
+- `receipts`: Signed usage receipts (includes optional `alias` string and `profile`)
 
 ### Key Concepts
 - All data is scoped by API key (via `X-Project-Key` header)

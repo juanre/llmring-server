@@ -18,6 +18,7 @@ async def test_log_and_stats(test_app, llmring_db):
             "input_tokens": 1000,
             "output_tokens": 200,
             "cached_input_tokens": 0,
+            "alias": "summarizer",
         },
         headers=PROJECT_HEADERS,
     )
@@ -30,3 +31,6 @@ async def test_log_and_stats(test_app, llmring_db):
     assert r.status_code == 200
     stats = r.json()
     assert "summary" in stats
+    # Optional: verify by_alias is present
+    assert "by_alias" in stats
+    assert isinstance(stats["by_alias"], dict)

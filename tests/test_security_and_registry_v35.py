@@ -4,10 +4,6 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_stateful_routes_require_project_key(test_app):
-    # Aliases list should 401 without header
-    r = await test_app.get("/api/v1/aliases/")
-    assert r.status_code == 401
-
     # Usage log should 401 without header
     r = await test_app.post(
         "/api/v1/log",

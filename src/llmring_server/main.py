@@ -145,12 +145,11 @@ def create_app(
                 asyncio.create_task(migrations.apply_pending_migrations())
     
     # Import routers
-    from .routers import aliases, receipts, registry, usage  # noqa: E402
+    from .routers import receipts, registry, usage  # noqa: E402
     
     # Include routers
     app.include_router(registry.router)
     app.include_router(usage.router)
-    app.include_router(aliases.router)
     app.include_router(receipts.router)
     
     # Add meta endpoints only if requested (not when used as sub-app)
@@ -201,6 +200,21 @@ def create_app(
             "crv": "Ed25519",
             "x": settings.receipts_public_key_base64.replace("=", ""),
         }
+
+    @app.get("/receipts/public-keys.json", response_class=JSONResponse)
+    async def receipts_public_keys_json():
+        """Return a simple key set (array) for future multi-key rotation support."""
+        if not settings.receipts_public_key_base64:
+            raise HTTPException(404, "Public key not configured")
+        key_id = getattr(settings, "receipts_key_id", None) or "default"
+        return [
+            {
+                "kid": key_id,
+                "kty": "OKP",
+                "crv": "Ed25519",
+                "x": settings.receipts_public_key_base64.replace("=", ""),
+            }
+        ]
     
     return app
 

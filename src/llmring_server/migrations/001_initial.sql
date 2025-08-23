@@ -24,22 +24,6 @@ CREATE INDEX idx_usage_logs_model ON {{tables.usage_logs}}(model, created_at DES
 CREATE INDEX idx_usage_logs_api_key_profile ON {{tables.usage_logs}}(api_key_id, profile, created_at DESC);
 CREATE INDEX idx_usage_logs_alias ON {{tables.usage_logs}}(alias, created_at DESC);
 
--- Aliases (global, optionally profiled)
-CREATE TABLE IF NOT EXISTS {{tables.aliases}} (
-    id SERIAL PRIMARY KEY,
-    project_id VARCHAR(255) NOT NULL,
-    profile VARCHAR(64) NOT NULL DEFAULT 'default',
-    alias VARCHAR(64) NOT NULL,
-    model VARCHAR(255) NOT NULL,
-    metadata JSONB,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(project_id, profile, alias)
-);
-
-CREATE INDEX idx_aliases_project ON {{tables.aliases}}(project_id);
-CREATE INDEX idx_aliases_project_profile ON {{tables.aliases}}(project_id, profile);
-
 CREATE TABLE IF NOT EXISTS {{tables.receipts}} (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     receipt_id VARCHAR(255) UNIQUE NOT NULL,
