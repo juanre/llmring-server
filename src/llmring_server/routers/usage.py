@@ -57,7 +57,13 @@ async def log_usage(
                 )
 
     timestamp = datetime.now()
-    log_id = await service.log_usage(project_id, log, cost, timestamp)
+    result = await service.log_usage(project_id, log, cost, timestamp)
+    
+    # Handle both old string return and new dict return for compatibility
+    if isinstance(result, dict):
+        log_id = result.get("usage_id", "")
+    else:
+        log_id = result  # Old string format
 
     return UsageLogResponse(log_id=str(log_id), cost=cost, timestamp=timestamp)
 

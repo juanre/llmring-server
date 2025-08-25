@@ -1,12 +1,13 @@
 import json
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Optional
+from typing import Dict, List, Optional
+from uuid import UUID
 
 import redis.asyncio as redis
 from pgdbm import AsyncDatabaseManager
 
-from llmring_server.config import Settings
+from llmring_server.config import MessageLoggingLevel, Settings
 from llmring_server.models.usage import (
     DailyUsage,
     ModelUsage,
@@ -30,14 +31,30 @@ class UsageService:
             pass
 
     async def log_usage(
-        self, api_key_id: str, log: UsageLogRequest, cost: float, timestamp: datetime
-    ) -> str:
+        self,
+        api_key_id: str,
+        log: UsageLogRequest,
+        cost: float,
+        timestamp: datetime,
+        conversation_id: Optional[UUID] = None,
+        messages: Optional[List[Dict]] = None,
+        logging_level: Optional[MessageLoggingLevel] = None
+    ) -> Dict:
+        """Log usage and optionally store conversation messages.
+        
+        Returns a dict with usage_id and optionally conversation details.
+        """
+        # Use default logging level from settings if not specified
+        if logging_level is None:
+            logging_level = settings.message_logging_level
+        
+        # Insert usage log with optional conversation_id
         query = """
             INSERT INTO {{tables.usage_logs}} (
                 api_key_id, model, provider, input_tokens, output_tokens,
                 cached_input_tokens, cost, latency_ms, origin, id_at_origin,
-                created_at, metadata, alias, profile
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                created_at, metadata, alias, profile, conversation_id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             RETURNING id
         """
         result = await self.db.fetch_one(
@@ -56,8 +73,45 @@ class UsageService:
             json.dumps(log.metadata),
             log.alias,
             log.profile or "default",
+            conversation_id,
         )
-        return str(result["id"]) if result else ""
+        usage_id = str(result["id"]) if result else ""
+        
+        # Handle message storage if enabled
+        messages_stored = 0
+        if (
+            messages
+            and conversation_id
+            and settings.enable_conversation_tracking
+            and logging_level != MessageLoggingLevel.NONE
+        ):
+            # Import here to avoid circular dependency
+            from llmring_server.services.conversations import ConversationService
+            conv_service = ConversationService(self.db, settings)
+            
+            for msg in messages:
+                from llmring_server.models.conversations import MessageCreate
+                message_create = MessageCreate(
+                    conversation_id=conversation_id,
+                    role=msg.get("role"),
+                    content=msg.get("content"),
+                    input_tokens=msg.get("input_tokens"),
+                    output_tokens=msg.get("output_tokens"),
+                    metadata=msg.get("metadata", {})
+                )
+                
+                stored = await conv_service.add_message(
+                    message_create,
+                    logging_level=logging_level
+                )
+                if stored:
+                    messages_stored += 1
+        
+        return {
+            "usage_id": usage_id,
+            "conversation_id": str(conversation_id) if conversation_id else None,
+            "messages_stored": messages_stored
+        }
 
     async def get_stats(
         self,

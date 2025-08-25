@@ -8,9 +8,11 @@ from pathlib import Path
 
 from pgdbm import AsyncDatabaseManager, AsyncMigrationManager
 
+from .config import Settings
 from .services.usage import UsageService
 from .services.receipts import ReceiptsService
 from .services.registry import RegistryService
+from .services.conversations import ConversationService
 
 
 class LLMRingService:
@@ -20,20 +22,23 @@ class LLMRingService:
     encapsulating all service functionality with a single database manager.
     """
     
-    def __init__(self, db: AsyncDatabaseManager, run_migrations: bool = False):
+    def __init__(self, db: AsyncDatabaseManager, settings: Optional[Settings] = None, run_migrations: bool = False):
         """Initialize the LLMRing service.
         
         Args:
             db: Database manager to use for all operations
+            settings: Optional settings (will use defaults if not provided)
             run_migrations: Whether to run migrations on initialization
         """
         self.db = db
+        self.settings = settings or Settings()
         self._run_migrations = run_migrations
         
         # Initialize services
         self.usage = UsageService(db)
         self.receipts = ReceiptsService(db)
         self.registry = RegistryService()
+        self.conversations = ConversationService(db, self.settings)
     
     async def initialize(self) -> None:
         """Initialize the service, optionally running migrations."""
