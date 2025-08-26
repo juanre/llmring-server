@@ -20,7 +20,7 @@ class ConversationBase(BaseModel):
 class ConversationCreate(ConversationBase):
     """Model for creating a conversation."""
     
-    project_id: Optional[UUID] = Field(None, description="Project that owns this conversation (NULL for local usage)")
+    api_key_id: Optional[str] = Field(None, description="API key that owns this conversation (NULL for local usage)")
 
 
 class ConversationUpdate(BaseModel):
@@ -37,7 +37,7 @@ class Conversation(ConversationBase):
     """Full conversation model."""
     
     id: UUID
-    project_id: Optional[UUID]  # NULL for local usage
+    api_key_id: Optional[str]  # NULL for local usage
     message_count: int = 0
     total_input_tokens: int = 0
     total_output_tokens: int = 0

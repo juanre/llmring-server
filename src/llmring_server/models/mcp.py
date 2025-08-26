@@ -21,7 +21,7 @@ class MCPServerBase(BaseModel):
 
 class MCPServerCreate(MCPServerBase):
     """Model for creating an MCP server."""
-    project_id: Optional[UUID] = None
+    api_key_id: Optional[str] = None
 
 
 class MCPServerUpdate(BaseModel):
@@ -36,7 +36,7 @@ class MCPServerUpdate(BaseModel):
 class MCPServer(MCPServerBase):
     """MCP server response model."""
     id: UUID
-    project_id: Optional[UUID] = None
+    api_key_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -54,7 +54,7 @@ class MCPToolBase(BaseModel):
 class MCPToolCreate(MCPToolBase):
     """Model for creating an MCP tool."""
     server_id: UUID = Field(..., description="Associated MCP server ID")
-    project_id: Optional[UUID] = None
+    api_key_id: Optional[str] = None
 
 
 class MCPToolUpdate(BaseModel):
@@ -68,13 +68,13 @@ class MCPTool(MCPToolBase):
     """MCP tool response model."""
     id: UUID
     server_id: UUID
-    project_id: Optional[UUID] = None
+    api_key_id: Optional[str] = None
     created_at: datetime
 
 
 class MCPToolWithServer(MCPTool):
     """MCP tool with server information."""
-    server: Optional[MCPServer] = None
+    server: Optional[Dict[str, Any]] = None  # Can be partial server info
 
 
 # ============= MCP Resource Models =============
@@ -91,7 +91,7 @@ class MCPResourceBase(BaseModel):
 class MCPResourceCreate(MCPResourceBase):
     """Model for creating an MCP resource."""
     server_id: UUID = Field(..., description="Associated MCP server ID")
-    project_id: Optional[UUID] = None
+    api_key_id: Optional[str] = None
 
 
 class MCPResourceUpdate(BaseModel):
@@ -106,7 +106,7 @@ class MCPResource(MCPResourceBase):
     """MCP resource response model."""
     id: UUID
     server_id: UUID
-    project_id: Optional[UUID] = None
+    api_key_id: Optional[str] = None
     created_at: datetime
 
 
@@ -123,7 +123,7 @@ class MCPPromptBase(BaseModel):
 class MCPPromptCreate(MCPPromptBase):
     """Model for creating an MCP prompt."""
     server_id: UUID = Field(..., description="Associated MCP server ID")
-    project_id: Optional[UUID] = None
+    api_key_id: Optional[str] = None
 
 
 class MCPPromptUpdate(BaseModel):
@@ -137,7 +137,7 @@ class MCPPrompt(MCPPromptBase):
     """MCP prompt response model."""
     id: UUID
     server_id: UUID
-    project_id: Optional[UUID] = None
+    api_key_id: Optional[str] = None
     created_at: datetime
 
 
@@ -145,7 +145,6 @@ class MCPPrompt(MCPPromptBase):
 
 class MCPToolExecutionRequest(BaseModel):
     """Request to execute an MCP tool."""
-    tool_id: UUID = Field(..., description="Tool ID to execute")
     input: Dict[str, Any] = Field(..., description="Tool input arguments")
     conversation_id: Optional[UUID] = Field(None, description="Associated conversation ID")
 

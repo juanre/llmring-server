@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS mcp_client.servers (
     auth_config JSONB,
     capabilities JSONB,
     is_active BOOLEAN DEFAULT true,
-    project_id UUID, -- NULL for local, set for SaaS
+    api_key_id VARCHAR(255), -- NULL for local, set for SaaS
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS mcp_client.tools (
     description TEXT,
     input_schema JSONB NOT NULL,
     is_active BOOLEAN DEFAULT true,
-    project_id UUID,
+    api_key_id VARCHAR(255),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(server_id, name)
 );
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS mcp_client.resources (
     description TEXT,
     mime_type VARCHAR(255),
     is_active BOOLEAN DEFAULT true,
-    project_id UUID,
+    api_key_id VARCHAR(255),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(server_id, uri)
 );
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS mcp_client.prompts (
     description TEXT,
     arguments JSONB,
     is_active BOOLEAN DEFAULT true,
-    project_id UUID,
+    api_key_id VARCHAR(255),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(server_id, name)
 );
@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS mcp_client.prompts (
 CREATE TABLE IF NOT EXISTS mcp_client.tool_executions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tool_id UUID REFERENCES mcp_client.tools(id) ON DELETE CASCADE,
-    conversation_id UUID REFERENCES llmring.conversations(id) ON DELETE CASCADE,
+    conversation_id UUID REFERENCES {{tables.conversations}}(id) ON DELETE CASCADE,
     input JSONB,
     output JSONB,
     error TEXT,
@@ -80,24 +80,24 @@ CREATE TABLE IF NOT EXISTS mcp_client.tool_executions (
 
 -- MCP servers indexes
 CREATE INDEX IF NOT EXISTS idx_mcp_servers_name ON mcp_client.servers(name);
-CREATE INDEX IF NOT EXISTS idx_mcp_servers_project ON mcp_client.servers(project_id);
+CREATE INDEX IF NOT EXISTS idx_mcp_servers_api_key ON mcp_client.servers(api_key_id);
 CREATE INDEX IF NOT EXISTS idx_mcp_servers_active ON mcp_client.servers(is_active);
 
 -- MCP tools indexes
 CREATE INDEX IF NOT EXISTS idx_mcp_tools_server ON mcp_client.tools(server_id);
 CREATE INDEX IF NOT EXISTS idx_mcp_tools_name ON mcp_client.tools(name);
-CREATE INDEX IF NOT EXISTS idx_mcp_tools_project ON mcp_client.tools(project_id);
+CREATE INDEX IF NOT EXISTS idx_mcp_tools_api_key ON mcp_client.tools(api_key_id);
 CREATE INDEX IF NOT EXISTS idx_mcp_tools_active ON mcp_client.tools(is_active);
 
 -- MCP resources indexes
 CREATE INDEX IF NOT EXISTS idx_mcp_resources_server ON mcp_client.resources(server_id);
 CREATE INDEX IF NOT EXISTS idx_mcp_resources_uri ON mcp_client.resources(uri);
-CREATE INDEX IF NOT EXISTS idx_mcp_resources_project ON mcp_client.resources(project_id);
+CREATE INDEX IF NOT EXISTS idx_mcp_resources_api_key ON mcp_client.resources(api_key_id);
 
 -- MCP prompts indexes
 CREATE INDEX IF NOT EXISTS idx_mcp_prompts_server ON mcp_client.prompts(server_id);
 CREATE INDEX IF NOT EXISTS idx_mcp_prompts_name ON mcp_client.prompts(name);
-CREATE INDEX IF NOT EXISTS idx_mcp_prompts_project ON mcp_client.prompts(project_id);
+CREATE INDEX IF NOT EXISTS idx_mcp_prompts_api_key ON mcp_client.prompts(api_key_id);
 
 -- Tool execution indexes
 CREATE INDEX IF NOT EXISTS idx_tool_executions_tool ON mcp_client.tool_executions(tool_id);

@@ -1,5 +1,6 @@
 """MCP (Model Context Protocol) service for llmring-server."""
 
+import json
 import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -30,7 +31,7 @@ class MCPService:
         transport_type: str,
         auth_config: Optional[Dict[str, Any]] = None,
         capabilities: Optional[Dict[str, Any]] = None,
-        project_id: Optional[UUID] = None,
+        api_key_id: Optional[str] = None,
     ) -> UUID:
         """Create a new MCP server.
         
@@ -40,28 +41,35 @@ class MCPService:
             transport_type: Transport type (stdio, http, websocket)
             auth_config: Authentication configuration
             capabilities: Server capabilities
-            project_id: Optional project ID
+            api_key_id: Optional project ID
             
         Returns:
             Server ID
         """
         query = """
             INSERT INTO mcp_client.servers (
-                name, url, transport_type, auth_config, capabilities, project_id
+                name, url, transport_type, auth_config, capabilities, api_key_id
             ) VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING id
         """
         
         result = await self.db.fetch_one(
-            query, name, url, transport_type, auth_config, capabilities, project_id
+            query, 
+            name, 
+            url, 
+            transport_type, 
+            json.dumps(auth_config) if auth_config else None,
+            json.dumps(capabilities) if capabilities else None, 
+            api_key_id
         )
         return result["id"]
     
-    async def get_server(self, server_id: UUID) -> Optional[Dict[str, Any]]:
+    async def get_server(self, server_id: UUID, api_key_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Get an MCP server by ID.
         
         Args:
             server_id: Server ID
+            api_key_id: Optional API key ID for filtering
             
         Returns:
             Server data or None
@@ -70,19 +78,33 @@ class MCPService:
             SELECT * FROM mcp_client.servers
             WHERE id = $1
         """
+        params = [server_id]
         
-        result = await self.db.fetch_one(query, server_id)
-        return dict(result) if result else None
+        if api_key_id is not None:
+            query += " AND api_key_id = $2"
+            params.append(api_key_id)
+        
+        result = await self.db.fetch_one(query, *params)
+        if not result:
+            return None
+        
+        # Convert to dict and parse JSON fields
+        server = dict(result)
+        if server.get('auth_config') and isinstance(server['auth_config'], str):
+            server['auth_config'] = json.loads(server['auth_config'])
+        if server.get('capabilities') and isinstance(server['capabilities'], str):
+            server['capabilities'] = json.loads(server['capabilities'])
+        return server
     
     async def list_servers(
         self,
-        project_id: Optional[UUID] = None,
+        api_key_id: Optional[str] = None,
         is_active: bool = True,
     ) -> List[Dict[str, Any]]:
         """List MCP servers.
         
         Args:
-            project_id: Filter by project ID
+            api_key_id: Filter by project ID
             is_active: Filter by active status
             
         Returns:
@@ -94,16 +116,24 @@ class MCPService:
         """
         params = [is_active]
         
-        if project_id is not None:
-            query += " AND project_id = $2"
-            params.append(project_id)
+        if api_key_id is not None:
+            query += " AND api_key_id = $2"
+            params.append(api_key_id)
         else:
-            query += " AND project_id IS NULL"
+            query += " AND api_key_id IS NULL"
         
         query += " ORDER BY created_at DESC"
         
         results = await self.db.fetch_all(query, *params)
-        return [dict(r) for r in results]
+        servers = []
+        for r in results:
+            server = dict(r)
+            if server.get('auth_config') and isinstance(server['auth_config'], str):
+                server['auth_config'] = json.loads(server['auth_config'])
+            if server.get('capabilities') and isinstance(server['capabilities'], str):
+                server['capabilities'] = json.loads(server['capabilities'])
+            servers.append(server)
+        return servers
     
     async def update_server(
         self,
@@ -144,12 +174,12 @@ class MCPService:
         if auth_config is not None:
             param_count += 1
             updates.append(f"auth_config = ${param_count}")
-            values.append(auth_config)
+            values.append(json.dumps(auth_config) if auth_config else None)
         
         if capabilities is not None:
             param_count += 1
             updates.append(f"capabilities = ${param_count}")
-            values.append(capabilities)
+            values.append(json.dumps(capabilities) if capabilities else None)
         
         if is_active is not None:
             param_count += 1
@@ -278,17 +308,54 @@ class MCPService:
     
     # ============= Tool Management =============
     
+    async def create_tool(
+        self,
+        server_id: UUID,
+        name: str,
+        description: Optional[str] = None,
+        input_schema: Dict[str, Any] = None,
+        api_key_id: Optional[str] = None,
+    ) -> UUID:
+        """Create a new MCP tool.
+        
+        Args:
+            server_id: Server ID
+            name: Tool name
+            description: Tool description
+            input_schema: JSON schema for tool input
+            api_key_id: Optional API key ID
+            
+        Returns:
+            Tool ID
+        """
+        query = """
+            INSERT INTO mcp_client.tools (
+                server_id, name, description, input_schema, api_key_id
+            ) VALUES ($1, $2, $3, $4, $5)
+            RETURNING id
+        """
+        
+        result = await self.db.fetch_one(
+            query,
+            server_id,
+            name,
+            description,
+            json.dumps(input_schema) if input_schema else None,
+            api_key_id
+        )
+        return result["id"]
+    
     async def list_tools(
         self,
         server_id: Optional[UUID] = None,
-        project_id: Optional[UUID] = None,
+        api_key_id: Optional[str] = None,
         is_active: bool = True,
     ) -> List[Dict[str, Any]]:
         """List MCP tools.
         
         Args:
             server_id: Filter by server ID
-            project_id: Filter by project ID
+            api_key_id: Filter by project ID
             is_active: Filter by active status
             
         Returns:
@@ -308,17 +375,23 @@ class MCPService:
             query += f" AND t.server_id = ${param_count}"
             params.append(server_id)
         
-        if project_id is not None:
+        if api_key_id is not None:
             param_count += 1
-            query += f" AND t.project_id = ${param_count}"
-            params.append(project_id)
+            query += f" AND t.api_key_id = ${param_count}"
+            params.append(api_key_id)
         else:
-            query += " AND t.project_id IS NULL"
+            query += " AND t.api_key_id IS NULL"
         
         query += " ORDER BY t.name"
         
         results = await self.db.fetch_all(query, *params)
-        return [dict(r) for r in results]
+        tools = []
+        for r in results:
+            tool = dict(r)
+            if tool.get('input_schema') and isinstance(tool['input_schema'], str):
+                tool['input_schema'] = json.loads(tool['input_schema'])
+            tools.append(tool)
+        return tools
     
     async def get_tool(self, tool_id: UUID) -> Optional[Dict[str, Any]]:
         """Get an MCP tool by ID.
@@ -337,7 +410,13 @@ class MCPService:
         """
         
         result = await self.db.fetch_one(query, tool_id)
-        return dict(result) if result else None
+        if not result:
+            return None
+        
+        tool = dict(result)
+        if tool.get('input_schema') and isinstance(tool['input_schema'], str):
+            tool['input_schema'] = json.loads(tool['input_schema'])
+        return tool
     
     async def execute_tool(
         self,
@@ -362,7 +441,7 @@ class MCPService:
             RETURNING id
         """
         
-        result = await self.db.fetch_one(query, tool_id, conversation_id, input)
+        result = await self.db.fetch_one(query, tool_id, conversation_id, json.dumps(input) if input else None)
         return result["id"]
     
     async def update_tool_execution(
@@ -421,14 +500,14 @@ class MCPService:
     async def list_resources(
         self,
         server_id: Optional[UUID] = None,
-        project_id: Optional[UUID] = None,
+        api_key_id: Optional[str] = None,
         is_active: bool = True,
     ) -> List[Dict[str, Any]]:
         """List MCP resources.
         
         Args:
             server_id: Filter by server ID
-            project_id: Filter by project ID
+            api_key_id: Filter by project ID
             is_active: Filter by active status
             
         Returns:
@@ -448,12 +527,12 @@ class MCPService:
             query += f" AND r.server_id = ${param_count}"
             params.append(server_id)
         
-        if project_id is not None:
+        if api_key_id is not None:
             param_count += 1
-            query += f" AND r.project_id = ${param_count}"
-            params.append(project_id)
+            query += f" AND r.api_key_id = ${param_count}"
+            params.append(api_key_id)
         else:
-            query += " AND r.project_id IS NULL"
+            query += " AND r.api_key_id IS NULL"
         
         query += " ORDER BY r.uri"
         
@@ -484,14 +563,14 @@ class MCPService:
     async def list_prompts(
         self,
         server_id: Optional[UUID] = None,
-        project_id: Optional[UUID] = None,
+        api_key_id: Optional[str] = None,
         is_active: bool = True,
     ) -> List[Dict[str, Any]]:
         """List MCP prompts.
         
         Args:
             server_id: Filter by server ID
-            project_id: Filter by project ID
+            api_key_id: Filter by project ID
             is_active: Filter by active status
             
         Returns:
@@ -511,12 +590,12 @@ class MCPService:
             query += f" AND p.server_id = ${param_count}"
             params.append(server_id)
         
-        if project_id is not None:
+        if api_key_id is not None:
             param_count += 1
-            query += f" AND p.project_id = ${param_count}"
-            params.append(project_id)
+            query += f" AND p.api_key_id = ${param_count}"
+            params.append(api_key_id)
         else:
-            query += " AND p.project_id IS NULL"
+            query += " AND p.api_key_id IS NULL"
         
         query += " ORDER BY p.name"
         

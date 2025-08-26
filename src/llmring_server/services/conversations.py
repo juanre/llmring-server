@@ -38,7 +38,7 @@ class ConversationService:
         
         query = """
             INSERT INTO {{tables.conversations}} (
-                project_id, title, system_prompt, model_alias,
+                api_key_id, title, system_prompt, model_alias,
                 temperature, max_tokens
             ) VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING *
@@ -46,7 +46,7 @@ class ConversationService:
         
         result = await self.db.fetch_one(
             query,
-            conversation.project_id,
+            conversation.api_key_id,
             conversation.title,
             conversation.system_prompt,
             conversation.model_alias,
@@ -59,7 +59,7 @@ class ConversationService:
     async def get_conversation(
         self,
         conversation_id: UUID,
-        project_id: Optional[str] = None
+        api_key_id: Optional[str] = None
     ) -> Optional[Conversation]:
         """Get a conversation by ID."""
         query = """
@@ -68,9 +68,9 @@ class ConversationService:
         """
         params = [conversation_id]
         
-        if project_id:
-            query += " AND project_id = $2"
-            params.append(project_id)
+        if api_key_id:
+            query += " AND api_key_id = $2"
+            params.append(api_key_id)
         
         result = await self.db.fetch_one(query, *params)
         return Conversation(**result) if result else None
@@ -79,7 +79,7 @@ class ConversationService:
         self,
         conversation_id: UUID,
         update: ConversationUpdate,
-        project_id: Optional[str] = None
+        api_key_id: Optional[str] = None
     ) -> Optional[Conversation]:
         """Update a conversation."""
         # Build update query dynamically
@@ -113,7 +113,7 @@ class ConversationService:
             param_count += 1
         
         if not updates:
-            return await self.get_conversation(conversation_id, project_id)
+            return await self.get_conversation(conversation_id, api_key_id)
         
         updates.append(f"updated_at = ${param_count}")
         params.append(datetime.now(timezone.utc))
@@ -127,9 +127,9 @@ class ConversationService:
         params.append(conversation_id)
         param_count += 1
         
-        if project_id:
-            query += f" AND project_id = ${param_count}"
-            params.append(project_id)
+        if api_key_id:
+            query += f" AND api_key_id = ${param_count}"
+            params.append(api_key_id)
         
         query += " RETURNING *"
         
@@ -240,11 +240,11 @@ class ConversationService:
     async def get_conversation_with_messages(
         self,
         conversation_id: UUID,
-        project_id: Optional[str] = None,
+        api_key_id: Optional[str] = None,
         message_limit: int = 100
     ) -> Optional[ConversationWithMessages]:
         """Get a conversation with its messages."""
-        conversation = await self.get_conversation(conversation_id, project_id)
+        conversation = await self.get_conversation(conversation_id, api_key_id)
         if not conversation:
             return None
         
@@ -260,7 +260,7 @@ class ConversationService:
     
     async def log_usage_with_conversation(
         self,
-        project_id: str,
+        api_key_id: str,
         usage_log: UsageLogRequest,
         cost: float,
         timestamp: datetime,
@@ -271,7 +271,7 @@ class ConversationService:
         # First, create the usage log with conversation_id
         query = """
             INSERT INTO {{tables.usage_logs}} (
-                project_id, model, provider, input_tokens, output_tokens,
+                api_key_id, model, provider, input_tokens, output_tokens,
                 cached_input_tokens, cost, latency_ms, origin, id_at_origin,
                 created_at, metadata, alias, profile, conversation_id
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
@@ -280,7 +280,7 @@ class ConversationService:
         
         usage_result = await self.db.fetch_one(
             query,
-            project_id,
+            api_key_id,
             usage_log.model,
             usage_log.provider,
             usage_log.input_tokens,
@@ -344,17 +344,17 @@ class ConversationService:
     
     async def list_conversations(
         self,
-        project_id: str,
+        api_key_id: str,
         limit: int = 20,
         offset: int = 0
     ) -> List[Conversation]:
         """List conversations for an API key."""
         query = """
             SELECT * FROM {{tables.conversations}}
-            WHERE project_id = $1
+            WHERE api_key_id = $1
             ORDER BY updated_at DESC
             LIMIT $2 OFFSET $3
         """
         
-        results = await self.db.fetch_all(query, project_id, limit, offset)
+        results = await self.db.fetch_all(query, api_key_id, limit, offset)
         return [Conversation(**r) for r in results]

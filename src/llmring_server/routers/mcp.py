@@ -1,12 +1,14 @@
 """MCP (Model Context Protocol) router for llmring-server."""
 
 import logging
+from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pgdbm import AsyncDatabaseManager
 
+from llmring_server.dependencies import get_db, get_project_id
 from llmring_server.models.mcp import (
     MCPCapabilities,
     MCPPrompt,
@@ -15,6 +17,7 @@ from llmring_server.models.mcp import (
     MCPServerCreate,
     MCPServerUpdate,
     MCPTool,
+    MCPToolCreate,
     MCPToolExecution,
     MCPToolExecutionRequest,
     MCPToolExecutionResponse,
@@ -27,7 +30,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/mcp", tags=["mcp"])
 
 
-async def get_mcp_service(db: AsyncDatabaseManager = Depends()) -> MCPService:
+async def get_mcp_service(db: AsyncDatabaseManager = Depends(get_db)) -> MCPService:
     """Get MCP service dependency."""
     return MCPService(db)
 
@@ -38,6 +41,7 @@ async def get_mcp_service(db: AsyncDatabaseManager = Depends()) -> MCPService:
 async def create_server(
     server: MCPServerCreate,
     mcp_service: MCPService = Depends(get_mcp_service),
+    api_key: str = Depends(get_project_id),
 ) -> MCPServer:
     """Register a new MCP server."""
     try:
@@ -47,7 +51,7 @@ async def create_server(
             transport_type=server.transport_type,
             auth_config=server.auth_config,
             capabilities=server.capabilities,
-            project_id=server.project_id,
+            api_key_id=api_key,
         )
         
         server_data = await mcp_service.get_server(server_id)
@@ -68,14 +72,14 @@ async def create_server(
 
 @router.get("/servers", response_model=List[MCPServer])
 async def list_servers(
-    project_id: Optional[UUID] = None,
     is_active: bool = True,
     mcp_service: MCPService = Depends(get_mcp_service),
+    api_key: str = Depends(get_project_id),
 ) -> List[MCPServer]:
     """List MCP servers."""
     try:
         servers = await mcp_service.list_servers(
-            project_id=project_id,
+            api_key_id=api_key,
             is_active=is_active,
         )
         return [MCPServer(**s) for s in servers]
@@ -91,10 +95,11 @@ async def list_servers(
 async def get_server(
     server_id: UUID,
     mcp_service: MCPService = Depends(get_mcp_service),
+    api_key: str = Depends(get_project_id),
 ) -> MCPServer:
     """Get an MCP server by ID."""
     try:
-        server = await mcp_service.get_server(server_id)
+        server = await mcp_service.get_server(server_id, api_key_id=api_key)
         if not server:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -111,11 +116,12 @@ async def get_server(
         )
 
 
-@router.put("/servers/{server_id}", response_model=MCPServer)
+@router.patch("/servers/{server_id}", response_model=MCPServer)
 async def update_server(
     server_id: UUID,
     update: MCPServerUpdate,
     mcp_service: MCPService = Depends(get_mcp_service),
+    api_key: str = Depends(get_project_id),
 ) -> MCPServer:
     """Update an MCP server."""
     try:
@@ -134,7 +140,7 @@ async def update_server(
                 detail="Server not found"
             )
         
-        server = await mcp_service.get_server(server_id)
+        server = await mcp_service.get_server(server_id, api_key_id=api_key)
         return MCPServer(**server)
     except HTTPException:
         raise
@@ -150,6 +156,7 @@ async def update_server(
 async def delete_server(
     server_id: UUID,
     mcp_service: MCPService = Depends(get_mcp_service),
+    api_key: str = Depends(get_project_id),
 ) -> dict:
     """Delete an MCP server."""
     try:
@@ -175,6 +182,7 @@ async def refresh_server_capabilities(
     server_id: UUID,
     capabilities: dict,
     mcp_service: MCPService = Depends(get_mcp_service),
+    api_key: str = Depends(get_project_id),
 ) -> MCPCapabilities:
     """Refresh server capabilities (tools, resources, prompts)."""
     try:
@@ -192,7 +200,7 @@ async def refresh_server_capabilities(
         )
         
         # Get updated data
-        server = await mcp_service.get_server(server_id)
+        server = await mcp_service.get_server(server_id, api_key_id=api_key)
         if not server:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -221,18 +229,49 @@ async def refresh_server_capabilities(
 
 # ============= Tool Endpoints =============
 
+@router.post("/tools", response_model=MCPTool)
+async def create_tool(
+    tool: MCPToolCreate,
+    mcp_service: MCPService = Depends(get_mcp_service),
+    api_key: str = Depends(get_project_id),
+) -> MCPTool:
+    """Create a new MCP tool."""
+    try:
+        tool_id = await mcp_service.create_tool(
+            server_id=tool.server_id,
+            name=tool.name,
+            description=tool.description,
+            input_schema=tool.input_schema,
+            api_key_id=api_key,
+        )
+        
+        tool_data = await mcp_service.get_tool(tool_id)
+        if not tool_data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create tool"
+            )
+        
+        return MCPTool(**tool_data)
+    except Exception as e:
+        logger.error(f"Error creating MCP tool: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
 @router.get("/tools", response_model=List[MCPToolWithServer])
 async def list_tools(
     server_id: Optional[UUID] = None,
-    project_id: Optional[UUID] = None,
     is_active: bool = True,
     mcp_service: MCPService = Depends(get_mcp_service),
+    api_key: str = Depends(get_project_id),
 ) -> List[MCPToolWithServer]:
     """List all MCP tools."""
     try:
         tools = await mcp_service.list_tools(
             server_id=server_id,
-            project_id=project_id,
+            api_key_id=api_key,
             is_active=is_active,
         )
         
@@ -250,7 +289,7 @@ async def list_tools(
             tool_with_server = MCPToolWithServer(
                 id=tool["id"],
                 server_id=tool["server_id"],
-                project_id=tool.get("project_id"),
+                api_key_id=tool.get("api_key_id"),
                 name=tool["name"],
                 description=tool.get("description"),
                 input_schema=tool["input_schema"],
@@ -293,7 +332,7 @@ async def get_tool(
         return MCPToolWithServer(
             id=tool["id"],
             server_id=tool["server_id"],
-            project_id=tool.get("project_id"),
+            api_key_id=tool.get("api_key_id"),
             name=tool["name"],
             description=tool.get("description"),
             input_schema=tool["input_schema"],
@@ -337,7 +376,7 @@ async def execute_tool(
             output=None,  # Would be filled by actual execution
             error=None,
             duration_ms=None,
-            executed_at=None,  # Will be set by DB
+            executed_at=datetime.now(timezone.utc),
         )
     except Exception as e:
         logger.error(f"Error executing MCP tool: {e}")
@@ -373,7 +412,7 @@ async def get_tool_history(
 @router.get("/resources", response_model=List[MCPResource])
 async def list_resources(
     server_id: Optional[UUID] = None,
-    project_id: Optional[UUID] = None,
+    api_key_id: Optional[UUID] = None,
     is_active: bool = True,
     mcp_service: MCPService = Depends(get_mcp_service),
 ) -> List[MCPResource]:
@@ -381,7 +420,7 @@ async def list_resources(
     try:
         resources = await mcp_service.list_resources(
             server_id=server_id,
-            project_id=project_id,
+            api_key_id=api_key_id,
             is_active=is_active,
         )
         return [MCPResource(**r) for r in resources]
@@ -449,7 +488,7 @@ async def get_resource_content(
 @router.get("/prompts", response_model=List[MCPPrompt])
 async def list_prompts(
     server_id: Optional[UUID] = None,
-    project_id: Optional[UUID] = None,
+    api_key_id: Optional[UUID] = None,
     is_active: bool = True,
     mcp_service: MCPService = Depends(get_mcp_service),
 ) -> List[MCPPrompt]:
@@ -457,7 +496,7 @@ async def list_prompts(
     try:
         prompts = await mcp_service.list_prompts(
             server_id=server_id,
-            project_id=project_id,
+            api_key_id=api_key_id,
             is_active=is_active,
         )
         return [MCPPrompt(**p) for p in prompts]

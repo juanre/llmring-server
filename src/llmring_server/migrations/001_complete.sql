@@ -7,7 +7,7 @@
 
 CREATE TABLE IF NOT EXISTS {{tables.usage_logs}} (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID,  -- NULL for local/non-SaaS usage
+    api_key_id VARCHAR(255),  -- Project key string, NULL for local usage
     model VARCHAR(255) NOT NULL,
     provider VARCHAR(50) NOT NULL,
     alias VARCHAR(128),
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS {{tables.usage_logs}} (
 CREATE TABLE IF NOT EXISTS {{tables.receipts}} (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     receipt_id VARCHAR(255) UNIQUE NOT NULL,
-    project_id UUID,  -- NULL for local/non-SaaS usage
+    api_key_id VARCHAR(255),  -- Project key string, NULL for local usage
     
     -- Model information
     alias VARCHAR(128),
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS {{tables.receipts}} (
 
 CREATE TABLE IF NOT EXISTS {{tables.conversations}} (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID,  -- NULL for local/non-SaaS usage  -- Who owns this conversation
+    api_key_id VARCHAR(255),  -- Project key string, NULL for local usage
     
     -- Conversation metadata
     title VARCHAR(500),
