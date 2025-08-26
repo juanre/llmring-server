@@ -8,19 +8,19 @@ LLMRing Server uses PostgreSQL for persistent storage and provides CLI commands 
 
 ### Test Environment
 - Database: `test_llmring_test` (auto-generated name)
-- Schema: `llmring_test`
+- Schemas: `llmring_test`, `mcp_client` (for MCP data)
 - Purpose: Automated testing with full isolation
 - Lifecycle: Created and destroyed per test run
 
 ### Development Environment
 - Database: `llmring_dev`
-- Schema: `llmring`
+- Schemas: `llmring`, `mcp_client`
 - Purpose: Local development
 - Configuration: Default localhost connection
 
 ### Production Environment
 - Database: Configured via `LLMRING_DATABASE_URL`
-- Schema: Configured via `LLMRING_DATABASE_SCHEMA`
+- Schemas: Configured via `LLMRING_DATABASE_SCHEMA` (default: `llmring`) + `mcp_client`
 - Purpose: Production deployment
 - Configuration: Must be explicitly set via environment variables
 

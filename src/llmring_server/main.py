@@ -145,13 +145,15 @@ def create_app(
                 asyncio.create_task(migrations.apply_pending_migrations())
     
     # Import routers
-    from .routers import conversations, receipts, registry, usage  # noqa: E402
+    from .routers import conversations, mcp, receipts, registry, templates, usage  # noqa: E402
     
     # Include routers
     app.include_router(registry.router)
     app.include_router(usage.router)
     app.include_router(receipts.router)
     app.include_router(conversations.router)
+    app.include_router(mcp.router)
+    app.include_router(templates.router)
     
     # Add meta endpoints only if requested (not when used as sub-app)
     if include_meta_routes:
