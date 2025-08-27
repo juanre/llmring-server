@@ -222,11 +222,14 @@ def create_app(
     return app
 
 
+# Create default app instance for uvicorn
+app = create_app()
+
+
 def main():
     """Run the server in standalone mode."""
     import uvicorn
     
-    app = create_app()
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 
