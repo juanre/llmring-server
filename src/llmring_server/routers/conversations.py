@@ -18,7 +18,7 @@ from llmring_server.models.conversations import (
 )
 from llmring_server.services.conversations import ConversationService
 
-router = APIRouter(prefix="/conversations", tags=["conversations"])
+router = APIRouter(prefix="/api/v1/conversations", tags=["conversations"])
 
 
 @router.post("/", response_model=Conversation)
