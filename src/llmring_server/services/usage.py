@@ -27,7 +27,8 @@ class UsageService:
         self.redis = None
         try:
             self.redis = redis.from_url(settings.redis_url)
-        except Exception:
+        except (redis.ConnectionError, redis.RedisError, ValueError):
+            # Redis is optional for caching, continue without it
             pass
 
     async def log_usage(

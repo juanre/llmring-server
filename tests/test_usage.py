@@ -1,7 +1,7 @@
 
 import pytest
 
-PROJECT_HEADERS = {"X-Project-Key": "proj_test"}
+PROJECT_HEADERS = {"X-API-Key": "proj_test"}
 
 
 @pytest.mark.asyncio

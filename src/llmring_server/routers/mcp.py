@@ -5,8 +5,10 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import UUID
 
+import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, status
 from pgdbm import AsyncDatabaseManager
+from pydantic import ValidationError
 
 from llmring_server.dependencies import get_db, get_project_id
 from llmring_server.models.mcp import (
@@ -62,7 +64,7 @@ async def create_server(
             )
         
         return MCPServer(**server_data)
-    except Exception as e:
+    except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error creating MCP server: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -83,7 +85,7 @@ async def list_servers(
             is_active=is_active,
         )
         return [MCPServer(**s) for s in servers]
-    except Exception as e:
+    except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error listing MCP servers: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -108,7 +110,7 @@ async def get_server(
         return MCPServer(**server)
     except HTTPException:
         raise
-    except Exception as e:
+    except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error getting MCP server: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -144,7 +146,7 @@ async def update_server(
         return MCPServer(**server)
     except HTTPException:
         raise
-    except Exception as e:
+    except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error updating MCP server: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -169,7 +171,7 @@ async def delete_server(
         return {"message": "Server deleted successfully"}
     except HTTPException:
         raise
-    except Exception as e:
+    except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error deleting MCP server: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -219,7 +221,7 @@ async def refresh_server_capabilities(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error refreshing server capabilities: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -253,7 +255,7 @@ async def create_tool(
             )
         
         return MCPTool(**tool_data)
-    except Exception as e:
+    except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error creating MCP tool: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -300,7 +302,7 @@ async def list_tools(
             result.append(tool_with_server)
         
         return result
-    except Exception as e:
+    except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error listing MCP tools: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -342,7 +344,7 @@ async def get_tool(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error getting MCP tool: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -378,7 +380,7 @@ async def execute_tool(
             duration_ms=None,
             executed_at=datetime.now(timezone.utc),
         )
-    except Exception as e:
+    except (asyncpg.PostgresError, ValidationError, ValueError, ConnectionError) as e:
         logger.error(f"Error executing MCP tool: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -399,7 +401,7 @@ async def get_tool_history(
             limit=limit,
         )
         return [MCPToolExecution(**e) for e in executions]
-    except Exception as e:
+    except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error getting tool history: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -424,7 +426,7 @@ async def list_resources(
             is_active=is_active,
         )
         return [MCPResource(**r) for r in resources]
-    except Exception as e:
+    except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error listing MCP resources: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -448,7 +450,7 @@ async def get_resource(
         return MCPResource(**resource)
     except HTTPException:
         raise
-    except Exception as e:
+    except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error getting MCP resource: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -475,7 +477,7 @@ async def get_resource_content(
         return {"resource": resource, "content": None}
     except HTTPException:
         raise
-    except Exception as e:
+    except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error getting resource content: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -500,7 +502,7 @@ async def list_prompts(
             is_active=is_active,
         )
         return [MCPPrompt(**p) for p in prompts]
-    except Exception as e:
+    except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error listing MCP prompts: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -524,7 +526,7 @@ async def get_prompt(
         return MCPPrompt(**prompt)
     except HTTPException:
         raise
-    except Exception as e:
+    except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error getting MCP prompt: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -552,7 +554,7 @@ async def render_prompt(
         return {"prompt": prompt, "arguments": arguments, "rendered": None}
     except HTTPException:
         raise
-    except Exception as e:
+    except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error rendering prompt: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
+import asyncpg
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -120,7 +121,7 @@ def create_app(
         allow_origins=settings.cors_origins,
         allow_credentials=False,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allow_headers=["X-Project-Key", "Content-Type", "If-None-Match"],
+        allow_headers=["X-API-Key", "Content-Type", "If-None-Match"],
     )
     
     # In library mode, set db immediately since there's no lifespan
@@ -172,7 +173,7 @@ def create_app(
             try:
                 await app.state.db.fetch_one("SELECT 1")
                 return {"status": "healthy", "database": "connected"}
-            except Exception as e:
+            except (asyncpg.PostgresError, asyncpg.InterfaceError, ConnectionError) as e:
                 logger.error(f"Health check failed: {e}")
                 return {"status": "unhealthy", "database": "disconnected"}
     

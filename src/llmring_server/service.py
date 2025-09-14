@@ -6,6 +6,7 @@ This module provides a clean interface for using llmring-server as a library.
 from typing import Optional
 from pathlib import Path
 
+import asyncpg
 from pgdbm import AsyncDatabaseManager, AsyncMigrationManager
 
 from .config import Settings
@@ -73,7 +74,7 @@ class LLMRingService:
         try:
             await self.db.fetch_one("SELECT 1")
             db_status = "healthy"
-        except Exception as e:
+        except (asyncpg.PostgresError, asyncpg.InterfaceError, ConnectionError) as e:
             db_status = f"unhealthy: {e}"
         
         return {

@@ -4,6 +4,7 @@ import os
 import sys
 from pathlib import Path
 
+import asyncpg
 import click
 import uvicorn
 from pgdbm import AsyncDatabaseManager, AsyncMigrationManager, DatabaseConfig
@@ -67,25 +68,30 @@ async def _migrate(env: str):
     """Apply migrations for the specified environment."""
     settings = _get_settings_for_env(env)
     
-    db = Database(
-        settings.database_url,
-        schema=settings.database_schema,
+    db_config = DatabaseConfig(
+        connection_string=settings.database_url,
     )
+    db = await AsyncDatabaseManager.create(db_config, schema=settings.database_schema)
     
     try:
-        await db.connect()
         click.echo(f"Connected to {env} database")
         
-        result = await db.run_migrations()
-        if result.get("applied"):
-            click.echo(f"Applied {len(result['applied'])} migrations:")
-            for migration in result['applied']:
-                click.echo(f"  - {migration}")
+        # Run migrations
+        migrations_path = Path(__file__).parent / "migrations"
+        migration_manager = AsyncMigrationManager(
+            db,
+            str(migrations_path),
+            module_name="llmring_server"
+        )
+        
+        result = await migration_manager.apply_pending_migrations()
+        if result:
+            click.echo(f"Applied migrations: {result}")
         else:
             click.echo("No pending migrations")
             
     finally:
-        await db.disconnect()
+        await db.close()
 
 
 @db.command()
@@ -189,22 +195,27 @@ async def _create_dev_db():
     
     # Now connect to the new database and apply migrations
     settings = _get_settings_for_env("dev")
-    db = Database(
-        settings.database_url,
-        schema=settings.database_schema,
+    db_config = DatabaseConfig(
+        connection_string=settings.database_url,
     )
+    db = await AsyncDatabaseManager.create(db_config, schema=settings.database_schema)
     
     try:
-        await db.connect()
-        result = await db.run_migrations()
-        if result.get("applied"):
-            click.echo(f"Applied {len(result['applied'])} migrations:")
-            for migration in result['applied']:
-                click.echo(f"  - {migration}")
+        # Run migrations
+        migrations_path = Path(__file__).parent / "migrations"
+        migration_manager = AsyncMigrationManager(
+            db,
+            str(migrations_path),
+            module_name="llmring_server"
+        )
+        
+        result = await migration_manager.apply_pending_migrations()
+        if result:
+            click.echo(f"Applied migrations: {result}")
         else:
             click.echo("No pending migrations")
     finally:
-        await db.disconnect()
+        await db.close()
 
 
 async def _create_test_db():
@@ -245,7 +256,7 @@ async def _create_test_db():
         finally:
             await db.disconnect()
             
-    except Exception as e:
+    except (asyncpg.PostgresError, ValueError, ConnectionError) as e:
         click.echo(f"Error creating test database: {e}", err=True)
         await test_db.drop_test_database()
         sys.exit(1)
@@ -272,7 +283,7 @@ async def _drop_test_db():
     try:
         await test_db.drop_test_database()
         click.echo("Dropped test database")
-    except Exception as e:
+    except (asyncpg.PostgresError, ValueError, ConnectionError) as e:
         click.echo(f"Error dropping test database: {e}", err=True)
 
 

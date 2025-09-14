@@ -5,21 +5,21 @@ MAX_PROJECT_KEY_LENGTH = 255
 
 
 async def get_project_id(request: Request) -> str:
-    """Extract and require the project scope header.
+    """Extract and require the API key header.
 
     The core server is key-scoped (no users). All stateful routes must include
-    the `X-Project-Key` header. We accept either case for convenience.
+    the `X-API-Key` header which contains the api_key_id. We accept either case for convenience.
     """
-    key = request.headers.get("X-Project-Key") or request.headers.get("x-project-key")
+    key = request.headers.get("X-API-Key") or request.headers.get("x-api-key")
     if not key:
-        raise HTTPException(status_code=401, detail="X-Project-Key header required")
+        raise HTTPException(status_code=401, detail="X-API-Key header required")
     key = key.strip()
     if not key:
-        raise HTTPException(status_code=401, detail="X-Project-Key header cannot be empty")
+        raise HTTPException(status_code=401, detail="X-API-Key header cannot be empty")
     if len(key) > MAX_PROJECT_KEY_LENGTH:
-        raise HTTPException(status_code=400, detail="X-Project-Key too long")
+        raise HTTPException(status_code=400, detail="X-API-Key too long")
     if any(ch.isspace() for ch in key):
-        raise HTTPException(status_code=400, detail="X-Project-Key must not contain whitespace")
+        raise HTTPException(status_code=400, detail="X-API-Key must not contain whitespace")
     return key
 
 

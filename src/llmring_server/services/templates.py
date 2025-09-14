@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID, uuid4
 
+from asyncpg import PostgresError
 from pgdbm import AsyncDatabaseManager
 
 from llmring_server.models.templates import (
@@ -62,7 +63,7 @@ class TemplateService:
                 return ConversationTemplate(**result)
             return None
 
-        except Exception as e:
+        except (PostgresError, ValueError, TypeError) as e:
             logger.error(f"Error creating conversation template: {e}")
             return None
 
@@ -87,7 +88,7 @@ class TemplateService:
                 return ConversationTemplate(**result)
             return None
 
-        except Exception as e:
+        except (PostgresError, ValueError, TypeError) as e:
             logger.error(f"Error getting conversation template: {e}")
             return None
 
@@ -125,7 +126,7 @@ class TemplateService:
             results = await self.db.fetch_all(query, *params)
             return [ConversationTemplate(**r) for r in results]
 
-        except Exception as e:
+        except (PostgresError, ValueError, TypeError) as e:
             logger.error(f"Error listing conversation templates: {e}")
             return []
 
@@ -177,7 +178,7 @@ class TemplateService:
                 return ConversationTemplate(**result)
             return None
 
-        except Exception as e:
+        except (PostgresError, ValueError, TypeError) as e:
             logger.error(f"Error updating conversation template: {e}")
             return None
 
@@ -201,7 +202,7 @@ class TemplateService:
             result = await self.db.execute(query, *params)
             return result == "UPDATE 1"
 
-        except Exception as e:
+        except (PostgresError, ValueError, TypeError) as e:
             logger.error(f"Error deleting conversation template: {e}")
             return False
 
@@ -231,7 +232,7 @@ class TemplateService:
                 return ConversationTemplate(**result)
             return None
 
-        except Exception as e:
+        except (PostgresError, ValueError, TypeError) as e:
             logger.error(f"Error updating template usage: {e}")
             return None
 
@@ -262,6 +263,6 @@ class TemplateService:
             results = await self.db.fetch_all(query, *params)
             return [ConversationTemplateStats(**r) for r in results]
 
-        except Exception as e:
+        except (PostgresError, ValueError, TypeError) as e:
             logger.error(f"Error getting template stats: {e}")
             return []

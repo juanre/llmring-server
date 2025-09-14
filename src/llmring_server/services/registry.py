@@ -17,7 +17,8 @@ class RegistryService:
         self.redis = None
         try:
             self.redis = redis.from_url(settings.redis_url)
-        except Exception:
+        except (redis.ConnectionError, redis.RedisError, ValueError) as e:
+            # Redis is optional for caching, continue without it
             pass
 
     async def get_registry(self, version: Optional[str] = None) -> RegistryResponse:
@@ -27,7 +28,8 @@ class RegistryService:
                 cached = await self.redis.get(cache_key)
                 if cached:
                     return RegistryResponse.model_validate_json(cached)
-            except Exception:
+            except (redis.RedisError, ValueError, TypeError):
+                # Cache miss or invalid cache data, continue to fetch fresh
                 pass
 
         base = settings.registry_base_url.rstrip("/") + "/"
@@ -45,7 +47,8 @@ class RegistryService:
                         or manifest.get("updated_at")
                         or ""
                     )
-            except Exception:
+            except (httpx.RequestError, httpx.HTTPStatusError, ValueError):
+                # Manifest is optional, continue without version info
                 pass
 
             for provider_key in providers.keys():
@@ -62,35 +65,9 @@ class RegistryService:
                     for model_key, info in raw_models.items():
                         if not isinstance(info, dict):
                             continue
-                        llm_model = LLMModel(
-                            provider=info.get("provider") or provider_key,
-                            model_name=info.get("model_name")
-                            or model_key.split(":", 1)[-1],
-                            display_name=info.get("display_name"),
-                            description=info.get("description"),
-                            max_input_tokens=info.get("max_input_tokens"),
-                            max_output_tokens=info.get("max_output_tokens"),
-                            supports_vision=bool(info.get("supports_vision", False)),
-                            supports_function_calling=bool(
-                                info.get("supports_function_calling", False)
-                            ),
-                            supports_json_mode=bool(
-                                info.get("supports_json_mode", False)
-                            ),
-                            supports_parallel_tool_calls=bool(
-                                info.get("supports_parallel_tool_calls", False)
-                            ),
-                            tool_call_format=info.get("tool_call_format"),
-                            dollars_per_million_tokens_input=info.get(
-                                "dollars_per_million_tokens_input"
-                            ),
-                            dollars_per_million_tokens_output=info.get(
-                                "dollars_per_million_tokens_output"
-                            ),
-                            is_active=bool(info.get("is_active", True)),
-                        )
-                        models[model_key] = llm_model
-                except Exception:
+                        models[model_key] = self._create_llm_model(model_key, info, provider_key)
+                except (httpx.RequestError, httpx.HTTPStatusError, ValueError, KeyError):
+                    # Skip this provider if fetch fails or data is invalid
                     continue
 
         registry = RegistryResponse(
@@ -106,7 +83,8 @@ class RegistryService:
                 await self.redis.setex(
                     cache_key, settings.cache_ttl, registry.model_dump_json()
                 )
-            except Exception:
+            except (redis.RedisError, ValueError):
+                # Cache write failure is not critical
                 pass
 
         return registry
@@ -131,35 +109,9 @@ class RegistryService:
                     for model_key, info in raw_models.items():
                         if not isinstance(info, dict):
                             continue
-                        llm_model = LLMModel(
-                            provider=info.get("provider") or provider_key,
-                            model_name=info.get("model_name")
-                            or model_key.split(":", 1)[-1],
-                            display_name=info.get("display_name"),
-                            description=info.get("description"),
-                            max_input_tokens=info.get("max_input_tokens"),
-                            max_output_tokens=info.get("max_output_tokens"),
-                            supports_vision=bool(info.get("supports_vision", False)),
-                            supports_function_calling=bool(
-                                info.get("supports_function_calling", False)
-                            ),
-                            supports_json_mode=bool(
-                                info.get("supports_json_mode", False)
-                            ),
-                            supports_parallel_tool_calls=bool(
-                                info.get("supports_parallel_tool_calls", False)
-                            ),
-                            tool_call_format=info.get("tool_call_format"),
-                            dollars_per_million_tokens_input=info.get(
-                                "dollars_per_million_tokens_input"
-                            ),
-                            dollars_per_million_tokens_output=info.get(
-                                "dollars_per_million_tokens_output"
-                            ),
-                            is_active=bool(info.get("is_active", True)),
-                        )
-                        models[model_key] = llm_model
-                except Exception:
+                        models[model_key] = self._create_llm_model(model_key, info, provider_key)
+                except (httpx.RequestError, httpx.HTTPStatusError, ValueError, KeyError):
+                    # Skip this provider if fetch fails or data is invalid
                     continue
 
         registry = RegistryResponse(
@@ -206,6 +158,25 @@ class RegistryService:
         return registry
 
     # Removed deprecated DB formatting helper
+
+    def _create_llm_model(self, model_key: str, info: dict, provider_key: str) -> LLMModel:
+        """Create an LLMModel from raw model info."""
+        return LLMModel(
+            provider=info.get("provider") or provider_key,
+            model_name=info.get("model_name") or model_key.split(":", 1)[-1],
+            display_name=info.get("display_name"),
+            description=info.get("description"),
+            max_input_tokens=info.get("max_input_tokens"),
+            max_output_tokens=info.get("max_output_tokens"),
+            supports_vision=bool(info.get("supports_vision", False)),
+            supports_function_calling=bool(info.get("supports_function_calling", False)),
+            supports_json_mode=bool(info.get("supports_json_mode", False)),
+            supports_parallel_tool_calls=bool(info.get("supports_parallel_tool_calls", False)),
+            tool_call_format=info.get("tool_call_format"),
+            dollars_per_million_tokens_input=info.get("dollars_per_million_tokens_input"),
+            dollars_per_million_tokens_output=info.get("dollars_per_million_tokens_output"),
+            is_active=bool(info.get("is_active", True)),
+        )
 
     def _get_default_providers(self) -> Dict[str, ProviderInfo]:
         return {

@@ -29,7 +29,7 @@ async def test_create_mcp_server(test_app):
                 "prompts": False
             },
         },
-        headers={"X-Project-Key": "test-project"},
+        headers={"X-API-Key": "test-project"},
     )
     
     assert response.status_code == 200
@@ -53,13 +53,13 @@ async def test_list_mcp_servers(test_app):
                 "url": f"http://localhost:808{i}",
                 "transport_type": "http",
             },
-            headers={"X-Project-Key": "test-list-project"},
+            headers={"X-API-Key": "test-list-project"},
         )
     
     # List them
     response = await test_app.get(
         "/api/v1/mcp/servers",
-        headers={"X-Project-Key": "test-list-project"},
+        headers={"X-API-Key": "test-list-project"},
     )
     
     assert response.status_code == 200
@@ -78,7 +78,7 @@ async def test_get_mcp_server(test_app):
             "url": "http://localhost:8080",
             "transport_type": "stdio",
         },
-        headers={"X-Project-Key": "test-project"},
+        headers={"X-API-Key": "test-project"},
     )
     assert create_response.status_code == 200
     server_id = create_response.json()["id"]
@@ -86,7 +86,7 @@ async def test_get_mcp_server(test_app):
     # Get the server
     response = await test_app.get(
         f"/api/v1/mcp/servers/{server_id}",
-        headers={"X-Project-Key": "test-project"},
+        headers={"X-API-Key": "test-project"},
     )
     
     assert response.status_code == 200
@@ -106,7 +106,7 @@ async def test_update_mcp_server(test_app):
             "url": "http://localhost:8080",
             "transport_type": "http",
         },
-        headers={"X-Project-Key": "test-project"},
+        headers={"X-API-Key": "test-project"},
     )
     assert create_response.status_code == 200
     server_id = create_response.json()["id"]
@@ -118,7 +118,7 @@ async def test_update_mcp_server(test_app):
             "name": "Updated Name",
             "is_active": False,
         },
-        headers={"X-Project-Key": "test-project"},
+        headers={"X-API-Key": "test-project"},
     )
     
     assert response.status_code == 200
@@ -138,7 +138,7 @@ async def test_delete_mcp_server(test_app):
             "url": "http://localhost:8080",
             "transport_type": "http",
         },
-        headers={"X-Project-Key": "test-project"},
+        headers={"X-API-Key": "test-project"},
     )
     assert create_response.status_code == 200
     server_id = create_response.json()["id"]
@@ -146,7 +146,7 @@ async def test_delete_mcp_server(test_app):
     # Delete it
     response = await test_app.delete(
         f"/api/v1/mcp/servers/{server_id}",
-        headers={"X-Project-Key": "test-project"},
+        headers={"X-API-Key": "test-project"},
     )
     
     assert response.status_code == 200
@@ -154,7 +154,7 @@ async def test_delete_mcp_server(test_app):
     # Verify it's gone
     get_response = await test_app.get(
         f"/api/v1/mcp/servers/{server_id}",
-        headers={"X-Project-Key": "test-project"},
+        headers={"X-API-Key": "test-project"},
     )
     assert get_response.status_code == 404
 
@@ -170,7 +170,7 @@ async def test_create_mcp_tool(test_app):
             "url": "http://localhost:8080",
             "transport_type": "http",
         },
-        headers={"X-Project-Key": "test-project"},
+        headers={"X-API-Key": "test-project"},
     )
     assert server_response.status_code == 200
     server_id = server_response.json()["id"]
@@ -189,7 +189,7 @@ async def test_create_mcp_tool(test_app):
                 }
             },
         },
-        headers={"X-Project-Key": "test-project"},
+        headers={"X-API-Key": "test-project"},
     )
     
     assert response.status_code == 200
@@ -209,7 +209,7 @@ async def test_list_mcp_tools(test_app):
             "url": "http://localhost:8080",
             "transport_type": "http",
         },
-        headers={"X-Project-Key": "test-tools-project"},
+        headers={"X-API-Key": "test-tools-project"},
     )
     assert server_response.status_code == 200
     server_id = server_response.json()["id"]
@@ -224,13 +224,13 @@ async def test_list_mcp_tools(test_app):
                 "description": f"Tool {i}",
                 "input_schema": {"type": "object"},
             },
-            headers={"X-Project-Key": "test-tools-project"},
+            headers={"X-API-Key": "test-tools-project"},
         )
     
     # List tools for the server
     response = await test_app.get(
         f"/api/v1/mcp/tools?server_id={server_id}",
-        headers={"X-Project-Key": "test-tools-project"},
+        headers={"X-API-Key": "test-tools-project"},
     )
     
     assert response.status_code == 200
@@ -249,7 +249,7 @@ async def test_execute_mcp_tool(test_app):
             "url": "http://localhost:8080",
             "transport_type": "http",
         },
-        headers={"X-Project-Key": "test-project"},
+        headers={"X-API-Key": "test-project"},
     )
     assert server_response.status_code == 200
     server_id = server_response.json()["id"]
@@ -267,7 +267,7 @@ async def test_execute_mcp_tool(test_app):
                 }
             },
         },
-        headers={"X-Project-Key": "test-project"},
+        headers={"X-API-Key": "test-project"},
     )
     assert tool_response.status_code == 200
     tool_id = tool_response.json()["id"]
@@ -278,7 +278,7 @@ async def test_execute_mcp_tool(test_app):
         json={
             "input": {"message": "Hello MCP"},
         },
-        headers={"X-Project-Key": "test-project"},
+        headers={"X-API-Key": "test-project"},
     )
     
     assert response.status_code == 200
@@ -299,7 +299,7 @@ async def test_mcp_server_isolation_by_api_key(test_app):
             "url": "http://localhost:8080",
             "transport_type": "http",
         },
-        headers={"X-Project-Key": "project-1"},
+        headers={"X-API-Key": "project-1"},
     )
     assert create_response.status_code == 200
     server_id = create_response.json()["id"]
@@ -307,7 +307,7 @@ async def test_mcp_server_isolation_by_api_key(test_app):
     # Try to get it with a different API key
     response = await test_app.get(
         f"/api/v1/mcp/servers/{server_id}",
-        headers={"X-Project-Key": "project-2"},
+        headers={"X-API-Key": "project-2"},
     )
     
     assert response.status_code == 404
@@ -335,6 +335,6 @@ async def test_mcp_requires_auth(test_app):
             "url": "http://localhost:8080",
             "transport_type": "http",
         },
-        headers={"X-Project-Key": ""},
+        headers={"X-API-Key": ""},
     )
     assert response.status_code == 401
