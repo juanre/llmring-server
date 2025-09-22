@@ -2,7 +2,7 @@
 
 ## Overview
 
-LLMRing Server provides a REST API for persistence, usage tracking, receipts, and MCP integration. All project-scoped endpoints require the `X-Project-Key` header for authentication.
+LLMRing Server provides a REST API for persistence, usage tracking, receipts, and MCP integration. All project-scoped endpoints require the `X-API-Key` header for authentication.
 
 ## Base URL
 
@@ -12,10 +12,10 @@ http://localhost:8000
 
 ## Authentication
 
-Most endpoints require authentication via the `X-Project-Key` header:
+Most endpoints require authentication via the `X-API-Key` header:
 
 ```http
-X-Project-Key: your-project-key-here
+X-API-Key: your-api-key-here
 ```
 
 ## API Endpoints
@@ -89,7 +89,7 @@ Returns aggregated model registry from all providers.
 
 ```http
 POST /api/v1/log
-X-Project-Key: required
+X-API-Key: required
 ```
 
 Log LLM usage for tracking and billing.
@@ -120,7 +120,7 @@ Log LLM usage for tracking and billing.
 
 ```http
 GET /api/v1/stats?start_date=2025-08-01&end_date=2025-08-26&group_by=day
-X-Project-Key: required
+X-API-Key: required
 ```
 
 Get usage statistics for the project.
@@ -155,7 +155,7 @@ Get usage statistics for the project.
 
 ```http
 POST /conversations
-X-Project-Key: required
+X-API-Key: required
 ```
 
 Create a new conversation.
@@ -186,7 +186,7 @@ Create a new conversation.
 
 ```http
 GET /conversations?limit=20&offset=0
-X-Project-Key: required
+X-API-Key: required
 ```
 
 List all conversations for the project.
@@ -195,7 +195,7 @@ List all conversations for the project.
 
 ```http
 GET /conversations/{conversation_id}
-X-Project-Key: required
+X-API-Key: required
 ```
 
 Get a conversation with all its messages.
@@ -226,7 +226,7 @@ Get a conversation with all its messages.
 
 ```http
 POST /conversations/{conversation_id}/messages/batch
-X-Project-Key: required
+X-API-Key: required
 ```
 
 Add multiple messages to a conversation.
@@ -251,7 +251,7 @@ Add multiple messages to a conversation.
 
 ```http
 POST /api/v1/mcp/servers
-X-Project-Key: required
+X-API-Key: required
 ```
 
 Register a new MCP server.
@@ -278,7 +278,7 @@ Register a new MCP server.
 
 ```http
 GET /api/v1/mcp/servers?project_id=uuid&is_active=true
-X-Project-Key: required
+X-API-Key: required
 ```
 
 List all registered MCP servers.
@@ -287,7 +287,7 @@ List all registered MCP servers.
 
 ```http
 GET /api/v1/mcp/tools?server_id=uuid&project_id=uuid
-X-Project-Key: required
+X-API-Key: required
 ```
 
 List all available tools from MCP servers.
@@ -322,7 +322,7 @@ List all available tools from MCP servers.
 
 ```http
 POST /api/v1/mcp/tools/{tool_id}/execute
-X-Project-Key: required
+X-API-Key: required
 ```
 
 Execute an MCP tool.
@@ -354,7 +354,7 @@ Execute an MCP tool.
 
 ```http
 GET /api/v1/mcp/resources?server_id=uuid
-X-Project-Key: required
+X-API-Key: required
 ```
 
 List all available resources from MCP servers.
@@ -363,7 +363,7 @@ List all available resources from MCP servers.
 
 ```http
 GET /api/v1/mcp/resources/{resource_id}/content
-X-Project-Key: required
+X-API-Key: required
 ```
 
 Get the content of a specific resource.
@@ -372,7 +372,7 @@ Get the content of a specific resource.
 
 ```http
 GET /api/v1/mcp/prompts?server_id=uuid
-X-Project-Key: required
+X-API-Key: required
 ```
 
 List all available prompts from MCP servers.
@@ -381,7 +381,7 @@ List all available prompts from MCP servers.
 
 ```http
 POST /api/v1/mcp/prompts/{prompt_id}/render
-X-Project-Key: required
+X-API-Key: required
 ```
 
 Render a prompt with arguments.
@@ -418,7 +418,7 @@ Render a prompt with arguments.
 
 ```http
 POST /api/v1/templates
-X-Project-Key: required
+X-API-Key: required
 ```
 
 Create a reusable conversation template.
@@ -443,7 +443,7 @@ Create a reusable conversation template.
 
 ```http
 GET /api/v1/templates
-X-Project-Key: required
+X-API-Key: required
 ```
 
 List all available templates.
@@ -452,7 +452,7 @@ List all available templates.
 
 ```http
 GET /api/v1/templates/stats
-X-Project-Key: required
+X-API-Key: required
 ```
 
 Get usage statistics for templates.
@@ -463,7 +463,7 @@ Get usage statistics for templates.
 
 ```http
 POST /api/v1/receipts
-X-Project-Key: required
+X-API-Key: required
 ```
 
 Store a signed receipt.
@@ -492,7 +492,7 @@ Store a signed receipt.
 
 ```http
 GET /api/v1/receipts/{receipt_id}
-X-Project-Key: required
+X-API-Key: required
 ```
 
 Retrieve a stored receipt.
@@ -501,7 +501,7 @@ Retrieve a stored receipt.
 
 ```http
 POST /api/v1/receipts/issue
-X-Project-Key: required
+X-API-Key: required
 ```
 
 Issue a new signed receipt (requires signing key configuration).
@@ -520,7 +520,7 @@ Common status codes:
 - `200 OK`: Success
 - `201 Created`: Resource created
 - `400 Bad Request`: Invalid request
-- `401 Unauthorized`: Missing or invalid X-Project-Key
+- `401 Unauthorized`: Missing or invalid X-API-Key
 - `404 Not Found`: Resource not found
 - `500 Internal Server Error`: Server error
 
