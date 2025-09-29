@@ -134,7 +134,7 @@ The server uses a key-scoped architecture (no user management):
 - `receipts`: Signed usage receipts (includes optional `alias` string and `profile`)
 
 ### Key Concepts
-- All data is scoped by API key (via `X-Project-Key` header)
+- All data is scoped by API key (via `X-API-Key` header)
 - No user accounts or authentication in core server
 - Profiles support (dev/staging/prod) per alias binding
 - Receipts provide cryptographic proof of usage

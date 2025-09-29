@@ -50,17 +50,14 @@ Minimal required: set `LLMRING_DATABASE_URL` to a reachable Postgres instance. I
 
 ## Authentication model
 
-- Project-scoped via `X-Project-Key` header
+- Project-scoped via `X-API-Key` header
 - No user management in this service
--- Aliases are local to each codebase in its lockfile; the server only logs the alias label used.
+- Aliases are local to each codebase in its lockfile; the server only logs the alias label used
 
 Security notes:
-- The `X-Project-Key` must be treated as a secret. Do not expose it publicly.
-- The server validates the header is present, non-empty, below 256 chars, and without whitespace.
-- In production, set narrow `LLMRING_CORS_ORIGINS` (avoid `*`) and deploy behind TLS.
-
-SaaS integration note:
-- When the SaaS (`llmring-api`) calls this core server, it maps `X-API-Key` from clients to a scoped `X-Project-Key` forwarded to this service.
+- The `X-API-Key` must be treated as a secret. Do not expose it publicly
+- The server validates the header is present, non-empty, below 256 chars, and without whitespace
+- In production, set narrow `LLMRING_CORS_ORIGINS` (avoid `*`) and deploy behind TLS
 
 ## Endpoints
 
@@ -73,7 +70,7 @@ SaaS integration note:
 - GET `/receipts/public-key.jwk` → current public key in JWK format
 - GET `/receipts/public-keys.json` → list of available public keys
 
-### Project-Scoped Endpoints (require header `X-Project-Key`)
+### Project-Scoped Endpoints (require header `X-API-Key`)
 
 #### Usage Tracking (`/api/v1`)
 - POST `/api/v1/log` → Log LLM usage
@@ -146,8 +143,8 @@ SaaS integration note:
 - POST `/prompts/{prompt_id}/render` → Render prompt with arguments
 
 Security notes:
-- Stats and logs are key-scoped; ensure you send the right project header to avoid data leakage across projects.
-- Receipts verification requires `LLMRING_RECEIPTS_PUBLIC_KEY_B64` to be configured; otherwise signatures are rejected.
+- Stats and logs are key-scoped; ensure you send the right API key to avoid data leakage across projects
+- Receipts verification requires `LLMRING_RECEIPTS_PUBLIC_KEY_B64` to be configured; otherwise signatures are rejected
 
 ## Receipts
 
@@ -211,7 +208,7 @@ The project uses:
 
 - [ ] Set `LLMRING_CORS_ORIGINS` to explicit origins (not `*`) in production
 - [ ] Serve behind TLS (reverse proxy like nginx or cloud load balancer)
-- [ ] Store and rotate `X-Project-Key` values securely; consider per-env keys
+- [ ] Store and rotate `X-API-Key` values securely; consider per-env keys
 - [ ] Configure `LLMRING_RECEIPTS_PUBLIC_KEY_B64` and `LLMRING_RECEIPTS_PRIVATE_KEY_B64` for receipts
 - [ ] Restrict egress if running in sensitive environments; registry fetches use outbound HTTP
 - [ ] Enable Redis with authentication (set `LLMRING_REDIS_URL`) if caching is needed
