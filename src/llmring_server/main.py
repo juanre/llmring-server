@@ -101,7 +101,7 @@ def create_app(
         app = FastAPI(
             title="LLMRing Server",
             description="Self-hostable LLM model registry and usage tracking",
-            version="0.1.0",
+            version="0.1.1",
             lifespan=lifespan,
         )
     else:
@@ -109,7 +109,7 @@ def create_app(
         app = FastAPI(
             title="LLMRing Server",
             description="Self-hostable LLM model registry and usage tracking",
-            version="0.1.0",
+            version="0.1.1",
         )
 
     # Store settings immediately for reference (lifespan will update if needed)
@@ -165,7 +165,7 @@ def create_app(
         async def root():
             return {
                 "name": "LLMRing Server",
-                "version": "0.1.0",
+                "version": "0.1.1",
                 "docs": "/docs",
                 "registry": "/registry",
             }

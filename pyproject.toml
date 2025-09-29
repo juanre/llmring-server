@@ -1,6 +1,6 @@
 [project]
 name = "llmring-server"
-version = "0.1.0"
+version = "0.1.1"
 description = "LLMRing core server: alias sync, receipts, and usage logging (key-scoped, no users)"
 readme = "README.md"
 authors = [

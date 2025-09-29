@@ -5,6 +5,20 @@ All notable changes to llmring-server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2025-09-29
+
+### Added
+- Pre-commit hooks for automatic code formatting (black, isort)
+- Tool configuration in pyproject.toml (black, isort, ruff, pytest)
+
+### Changed
+- Formatted all code with black and isort
+- Fixed trailing whitespace and end of file issues across codebase
+
+### Fixed
+- Documentation: corrected all references from `X-Project-Key` to `X-API-Key`
+- Removed outdated SaaS integration note from README
+
 ## [0.1.0] - 2025-09-29
 
 ### Added
@@ -37,4 +51,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Header validation (length, whitespace checks)
 - CORS configuration with origin restrictions
 
+[0.1.1]: https://github.com/juanre/llmring/releases/tag/llmring-server-0.1.1
 [0.1.0]: https://github.com/juanre/llmring/releases/tag/llmring-server-0.1.0

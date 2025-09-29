@@ -84,7 +84,7 @@ async def test_dual_mode_root_endpoint(dual_mode_app):
 
     data = response.json()
     assert data["name"] == "LLMRing Server"
-    assert data["version"] == "0.1.0"
+    assert data["version"] == "0.1.1"
     assert data["registry"] == "/registry"
 
 
