@@ -3,29 +3,34 @@
 This module provides a clean interface for using llmring-server as a library.
 """
 
-from typing import Optional
 from pathlib import Path
+from typing import Optional
 
 import asyncpg
 from pgdbm import AsyncDatabaseManager, AsyncMigrationManager
 
 from .config import Settings
-from .services.usage import UsageService
+from .services.conversations import ConversationService
 from .services.receipts import ReceiptsService
 from .services.registry import RegistryService
-from .services.conversations import ConversationService
+from .services.usage import UsageService
 
 
 class LLMRingService:
     """High-level service interface for llmring-server functionality.
-    
+
     This class provides a clean API for using llmring-server as a library,
     encapsulating all service functionality with a single database manager.
     """
-    
-    def __init__(self, db: AsyncDatabaseManager, settings: Optional[Settings] = None, run_migrations: bool = False):
+
+    def __init__(
+        self,
+        db: AsyncDatabaseManager,
+        settings: Optional[Settings] = None,
+        run_migrations: bool = False,
+    ):
         """Initialize the LLMRing service.
-        
+
         Args:
             db: Database manager to use for all operations
             settings: Optional settings (will use defaults if not provided)
@@ -34,40 +39,40 @@ class LLMRingService:
         self.db = db
         self.settings = settings or Settings()
         self._run_migrations = run_migrations
-        
+
         # Initialize services
         self.usage = UsageService(db)
         self.receipts = ReceiptsService(db)
         self.registry = RegistryService()
         self.conversations = ConversationService(db, self.settings)
-    
+
     async def initialize(self) -> None:
         """Initialize the service, optionally running migrations."""
         if self._run_migrations:
             await self.run_migrations()
-    
+
     async def run_migrations(self) -> dict:
         """Run database migrations.
-        
+
         Returns:
             Dictionary with migration results
         """
         migrations_path = Path(__file__).parent / "migrations"
         if not migrations_path.exists():
             return {"error": "Migrations directory not found"}
-        
+
         migration_manager = AsyncMigrationManager(
             self.db,
             migrations_path=str(migrations_path),
             module_name="llmring_server",
         )
-        
+
         result = await migration_manager.apply_pending_migrations()
         return result
-    
+
     async def check_health(self) -> dict:
         """Check service health.
-        
+
         Returns:
             Health status dictionary
         """
@@ -76,7 +81,7 @@ class LLMRingService:
             db_status = "healthy"
         except (asyncpg.PostgresError, asyncpg.InterfaceError, ConnectionError) as e:
             db_status = f"unhealthy: {e}"
-        
+
         return {
             "status": "healthy" if db_status == "healthy" else "degraded",
             "database": db_status,
@@ -84,5 +89,5 @@ class LLMRingService:
                 "usage": "ready",
                 "receipts": "ready",
                 "registry": "ready",
-            }
+            },
         }

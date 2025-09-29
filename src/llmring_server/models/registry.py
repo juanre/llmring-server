@@ -5,9 +5,7 @@ from pydantic import BaseModel, Field
 
 
 class LLMModel(BaseModel):
-    provider: str = Field(
-        ..., description="Model provider (anthropic, openai, google, ollama)"
-    )
+    provider: str = Field(..., description="Model provider (anthropic, openai, google, ollama)")
     model_name: str = Field(..., description="Model name")
     display_name: Optional[str] = None
     description: Optional[str] = None

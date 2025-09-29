@@ -1,7 +1,8 @@
 """Tests for conversation and message management."""
 
-import pytest
 from uuid import uuid4
+
+import pytest
 
 from llmring_server.models.conversations import (
     ConversationCreate,
@@ -26,7 +27,7 @@ async def test_create_conversation(test_app):
         },
         headers={"X-API-Key": "test-project"},
     )
-    
+
     assert response.status_code == 200
     data = response.json()
     assert data["title"] == "Test Conversation"
@@ -51,13 +52,13 @@ async def test_get_conversation(test_app):
     )
     assert create_response.status_code == 200
     conversation_id = create_response.json()["id"]
-    
+
     # Get the conversation
     response = await test_app.get(
         f"/api/v1/conversations/{conversation_id}",
         headers={"X-API-Key": "test-project"},
     )
-    
+
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == conversation_id
@@ -79,13 +80,13 @@ async def test_get_conversation_without_messages(test_app):
     )
     assert create_response.status_code == 200
     conversation_id = create_response.json()["id"]
-    
+
     # Get the conversation without messages
     response = await test_app.get(
         f"/api/v1/conversations/{conversation_id}?include_messages=false",
         headers={"X-API-Key": "test-project"},
     )
-    
+
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == conversation_id
@@ -100,7 +101,7 @@ async def test_get_conversation_not_found(test_app):
         f"/api/v1/conversations/{fake_id}",
         headers={"X-API-Key": "test-project"},
     )
-    
+
     assert response.status_code == 404
     assert "not found" in response.json()["detail"].lower()
 
@@ -119,13 +120,13 @@ async def test_get_conversation_wrong_api_key(test_app):
     )
     assert create_response.status_code == 200
     conversation_id = create_response.json()["id"]
-    
+
     # Try to get it with a different API key
     response = await test_app.get(
         f"/api/v1/conversations/{conversation_id}",
         headers={"X-API-Key": "project-2"},
     )
-    
+
     assert response.status_code == 404
 
 
@@ -143,7 +144,7 @@ async def test_update_conversation(test_app):
     )
     assert create_response.status_code == 200
     conversation_id = create_response.json()["id"]
-    
+
     # Update it
     response = await test_app.patch(
         f"/api/v1/conversations/{conversation_id}",
@@ -153,7 +154,7 @@ async def test_update_conversation(test_app):
         },
         headers={"X-API-Key": "test-project"},
     )
-    
+
     assert response.status_code == 200
     data = response.json()
     assert data["title"] == "Updated Title"
@@ -173,23 +174,23 @@ async def test_list_conversations(test_app):
             },
             headers={"X-API-Key": "test-list-project"},
         )
-    
+
     # List them
     response = await test_app.get(
         "/api/v1/conversations/",
         headers={"X-API-Key": "test-list-project"},
     )
-    
+
     assert response.status_code == 200
     data = response.json()
     assert len(data) >= 3
-    
+
     # Test pagination
     response = await test_app.get(
         "/api/v1/conversations/?limit=2",
         headers={"X-API-Key": "test-list-project"},
     )
-    
+
     assert response.status_code == 200
     data = response.json()
     assert len(data) <= 2
@@ -209,7 +210,7 @@ async def test_add_messages_batch(test_app):
     )
     assert create_response.status_code == 200
     conversation_id = create_response.json()["id"]
-    
+
     # Add messages
     response = await test_app.post(
         f"/api/v1/conversations/{conversation_id}/messages/batch",
@@ -231,7 +232,7 @@ async def test_add_messages_batch(test_app):
         },
         headers={"X-API-Key": "test-project"},
     )
-    
+
     assert response.status_code == 200
     messages = response.json()
     assert len(messages) == 2
@@ -255,7 +256,7 @@ async def test_add_messages_metadata_only(test_app):
     )
     assert create_response.status_code == 200
     conversation_id = create_response.json()["id"]
-    
+
     # Add messages with metadata logging
     response = await test_app.post(
         f"/api/v1/conversations/{conversation_id}/messages/batch",
@@ -271,7 +272,7 @@ async def test_add_messages_metadata_only(test_app):
         },
         headers={"X-API-Key": "test-project"},
     )
-    
+
     assert response.status_code == 200
     messages = response.json()
     assert len(messages) == 1
@@ -293,7 +294,7 @@ async def test_get_conversation_messages(test_app):
     )
     assert create_response.status_code == 200
     conversation_id = create_response.json()["id"]
-    
+
     # Add some messages
     await test_app.post(
         f"/api/v1/conversations/{conversation_id}/messages/batch",
@@ -309,23 +310,23 @@ async def test_get_conversation_messages(test_app):
         },
         headers={"X-API-Key": "test-project"},
     )
-    
+
     # Get messages
     response = await test_app.get(
         f"/api/v1/conversations/{conversation_id}/messages",
         headers={"X-API-Key": "test-project"},
     )
-    
+
     assert response.status_code == 200
     messages = response.json()
     assert len(messages) == 4
-    
+
     # Test pagination
     response = await test_app.get(
         f"/api/v1/conversations/{conversation_id}/messages?limit=2&offset=1",
         headers={"X-API-Key": "test-project"},
     )
-    
+
     assert response.status_code == 200
     messages = response.json()
     assert len(messages) == 2
@@ -336,19 +337,19 @@ async def test_get_conversation_messages(test_app):
 async def test_conversation_stats_update(llmring_db):
     """Test that conversation stats are updated automatically."""
     from llmring_server.config import Settings
-    
+
     settings = Settings()
     service = ConversationService(llmring_db, settings)
-    
+
     # Create conversation
     conversation_data = ConversationCreate(
-        api_key_id="test-key",  # Set consistent api_key_id  
+        api_key_id="test-key",  # Set consistent api_key_id
         title="Stats Test",
         model_alias="default",
     )
     conversation = await service.create_conversation(conversation_data)
     assert conversation is not None
-    
+
     # Add messages with token counts
     batch = MessageBatch(
         conversation_id=conversation.id,
@@ -367,7 +368,7 @@ async def test_conversation_stats_update(llmring_db):
         logging_level="full",
     )
     await service.add_messages_batch(batch)
-    
+
     # Get updated conversation
     updated = await service.get_conversation(conversation.id, "test-key")
     assert updated is not None
@@ -388,7 +389,7 @@ async def test_conversation_requires_auth(test_app):
         },
     )
     assert response.status_code == 401
-    
+
     # Try with empty header
     response = await test_app.post(
         "/api/v1/conversations/",
@@ -399,7 +400,7 @@ async def test_conversation_requires_auth(test_app):
         headers={"X-API-Key": ""},
     )
     assert response.status_code == 401
-    
+
     # Try with whitespace in key
     response = await test_app.post(
         "/api/v1/conversations/",

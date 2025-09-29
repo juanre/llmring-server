@@ -1,7 +1,6 @@
 import pytest
 
 
-
 @pytest.mark.asyncio
 async def test_stateful_routes_require_project_key(test_app):
     # Usage log should 401 without header

@@ -1,13 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pgdbm import AsyncDatabaseManager
 
-from llmring_server.dependencies import get_project_id, get_db
-from llmring_server.models.receipts import (
-    Receipt,
-    ReceiptRequest,
-    ReceiptResponse,
-    UnsignedReceipt,
-)
+from llmring_server.dependencies import get_db, get_project_id
+from llmring_server.models.receipts import Receipt, ReceiptRequest, ReceiptResponse, UnsignedReceipt
 from llmring_server.services.receipts import ReceiptsService
 
 router = APIRouter(prefix="/api/v1/receipts", tags=["receipts"])

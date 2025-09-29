@@ -91,7 +91,12 @@ class ReceiptsService:
             verify_key = signing.VerifyKey(_b64url_decode(verify_key_b64))
             verify_key.verify(canonical, _b64url_decode(sig_b64))
             return True
-        except (ValueError, nacl.exceptions.BadSignatureError, AttributeError, KeyError):
+        except (
+            ValueError,
+            nacl.exceptions.BadSignatureError,
+            AttributeError,
+            KeyError,
+        ):
             # Invalid signature format, verification failed, or missing data
             return False
 

@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class ConversationTemplateBase(BaseModel):
     """Base model for conversation templates."""
-    
+
     name: str = Field(..., max_length=255)
     description: Optional[str] = None
     system_prompt: Optional[str] = None
@@ -21,14 +21,14 @@ class ConversationTemplateBase(BaseModel):
 
 class ConversationTemplateCreate(ConversationTemplateBase):
     """Model for creating a conversation template."""
-    
+
     project_id: Optional[UUID] = Field(None, description="Project that owns this template")
     created_by: str = Field(..., max_length=255, description="User who created this template")
 
 
 class ConversationTemplateUpdate(BaseModel):
     """Model for updating a conversation template."""
-    
+
     name: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = None
     system_prompt: Optional[str] = None
@@ -41,7 +41,7 @@ class ConversationTemplateUpdate(BaseModel):
 
 class ConversationTemplate(ConversationTemplateBase):
     """Full conversation template model."""
-    
+
     id: UUID
     project_id: Optional[UUID]  # NULL for global templates
     created_by: str
@@ -50,13 +50,13 @@ class ConversationTemplate(ConversationTemplateBase):
     created_at: datetime
     updated_at: datetime
     last_used_at: Optional[datetime] = None
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
 class ConversationTemplateStats(BaseModel):
     """Statistics for a conversation template."""
-    
+
     template_id: UUID
     template_name: str
     usage_count: int

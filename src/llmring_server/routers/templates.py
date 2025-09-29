@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pgdbm import AsyncDatabaseManager
 
-from llmring_server.dependencies import get_project_id, get_db
+from llmring_server.dependencies import get_db, get_project_id
 from llmring_server.models.templates import (
     ConversationTemplate,
     ConversationTemplateCreate,
@@ -26,14 +26,14 @@ async def create_template(
 ) -> ConversationTemplate:
     """Create a new conversation template."""
     service = TemplateService(db)
-    
+
     # Override project_id with authenticated value
     template_data.project_id = project_id
-    
+
     result = await service.create_template(template_data)
     if not result:
         raise HTTPException(500, "Failed to create template")
-    
+
     return result
 
 
@@ -74,11 +74,11 @@ async def get_template(
 ) -> ConversationTemplate:
     """Get a conversation template by ID."""
     service = TemplateService(db)
-    
+
     result = await service.get_template(template_id, project_id)
     if not result:
         raise HTTPException(404, "Template not found")
-    
+
     return result
 
 
@@ -91,11 +91,11 @@ async def update_template(
 ) -> ConversationTemplate:
     """Update a conversation template."""
     service = TemplateService(db)
-    
+
     result = await service.update_template(template_id, update_data, project_id)
     if not result:
         raise HTTPException(404, "Template not found")
-    
+
     return result
 
 
@@ -107,11 +107,11 @@ async def delete_template(
 ) -> dict:
     """Delete a conversation template."""
     service = TemplateService(db)
-    
+
     success = await service.delete_template(template_id, project_id)
     if not success:
         raise HTTPException(404, "Template not found")
-    
+
     return {"message": "Template deleted successfully"}
 
 
@@ -123,9 +123,9 @@ async def use_template(
 ) -> ConversationTemplate:
     """Mark a template as used and update usage statistics."""
     service = TemplateService(db)
-    
+
     result = await service.use_template(template_id, project_id)
     if not result:
         raise HTTPException(404, "Template not found")
-    
+
     return result

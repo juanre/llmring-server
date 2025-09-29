@@ -31,16 +31,16 @@ async def create_conversation(
     settings = Settings()
     if not settings.enable_conversation_tracking:
         raise HTTPException(400, "Conversation tracking is disabled")
-    
+
     service = ConversationService(db, settings)
-    
+
     # Set the api_key_id to the project_key from the header
     conversation_data.api_key_id = project_key
-    
+
     result = await service.create_conversation(conversation_data)
     if not result:
         raise HTTPException(500, "Failed to create conversation")
-    
+
     return result
 
 
@@ -55,29 +55,21 @@ async def get_conversation(
     """Get a conversation with optional messages."""
     settings = Settings()
     service = ConversationService(db, settings)
-    
+
     if include_messages:
         result = await service.get_conversation_with_messages(
-            conversation_id,
-            api_key_id=project_key,
-            message_limit=message_limit
+            conversation_id, api_key_id=project_key, message_limit=message_limit
         )
     else:
-        conversation = await service.get_conversation(
-            conversation_id,
-            api_key_id=project_key
-        )
+        conversation = await service.get_conversation(conversation_id, api_key_id=project_key)
         if conversation:
-            result = ConversationWithMessages(
-                **conversation.model_dump(),
-                messages=[]
-            )
+            result = ConversationWithMessages(**conversation.model_dump(), messages=[])
         else:
             result = None
-    
+
     if not result:
         raise HTTPException(404, "Conversation not found")
-    
+
     return result
 
 
@@ -91,16 +83,12 @@ async def update_conversation(
     """Update a conversation."""
     settings = Settings()
     service = ConversationService(db, settings)
-    
-    result = await service.update_conversation(
-        conversation_id,
-        update_data,
-        api_key_id=project_key
-    )
-    
+
+    result = await service.update_conversation(conversation_id, update_data, api_key_id=project_key)
+
     if not result:
         raise HTTPException(404, "Conversation not found")
-    
+
     return result
 
 
@@ -115,7 +103,7 @@ async def list_conversations(
     settings = Settings()
     if not settings.enable_conversation_tracking:
         return []
-    
+
     service = ConversationService(db, settings)
     return await service.list_conversations(project_key, limit, offset)
 
@@ -131,20 +119,13 @@ async def get_conversation_messages(
     """Get messages for a conversation."""
     settings = Settings()
     service = ConversationService(db, settings)
-    
+
     # Verify conversation belongs to API key
-    conversation = await service.get_conversation(
-        conversation_id,
-        api_key_id=project_key
-    )
+    conversation = await service.get_conversation(conversation_id, api_key_id=project_key)
     if not conversation:
         raise HTTPException(404, "Conversation not found")
-    
-    return await service.get_conversation_messages(
-        conversation_id,
-        limit=limit,
-        offset=offset
-    )
+
+    return await service.get_conversation_messages(conversation_id, limit=limit, offset=offset)
 
 
 @router.post("/{conversation_id}/messages/batch", response_model=List[Message])
@@ -158,20 +139,17 @@ async def add_messages_batch(
     settings = Settings()
     if settings.message_logging_level == "none":
         raise HTTPException(400, "Message logging is disabled")
-    
+
     service = ConversationService(db, settings)
-    
+
     # Verify conversation belongs to API key
-    conversation = await service.get_conversation(
-        conversation_id,
-        api_key_id=project_key
-    )
+    conversation = await service.get_conversation(conversation_id, api_key_id=project_key)
     if not conversation:
         raise HTTPException(404, "Conversation not found")
-    
+
     # Ensure batch conversation_id matches
     batch.conversation_id = conversation_id
-    
+
     return await service.add_messages_batch(batch)
 
 
@@ -185,10 +163,10 @@ async def cleanup_old_messages(
     # Admin check should be added when role-based access control is implemented
     settings = Settings()
     service = ConversationService(db, settings)
-    
+
     deleted_count = await service.cleanup_old_messages(retention_days)
-    
+
     return {
         "deleted_count": deleted_count,
-        "retention_days": retention_days or settings.message_retention_days
+        "retention_days": retention_days or settings.message_retention_days,
     }

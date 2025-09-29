@@ -18,9 +18,7 @@ class CostBreakdown(BaseModel):
 class Receipt(BaseModel):
     id: str
     timestamp: datetime
-    registry_version: (
-        str  # deprecated in favor of per-provider versions; kept for compat
-    )
+    registry_version: str  # deprecated in favor of per-provider versions; kept for compat
     model: str
     alias: str
     profile: str = "default"

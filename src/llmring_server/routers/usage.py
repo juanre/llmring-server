@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from pgdbm import AsyncDatabaseManager
 
-from llmring_server.dependencies import get_project_id, get_db
+from llmring_server.dependencies import get_db, get_project_id
 from llmring_server.models.usage import UsageLogRequest, UsageLogResponse, UsageStats
 from llmring_server.services.usage import UsageService
 
@@ -17,7 +17,7 @@ router = APIRouter(
 
 @router.post("/log", response_model=UsageLogResponse)
 async def log_usage(
-    log: UsageLogRequest, 
+    log: UsageLogRequest,
     project_id: str = Depends(get_project_id),
     db: AsyncDatabaseManager = Depends(get_db),
 ) -> UsageLogResponse:
@@ -44,21 +44,15 @@ async def log_usage(
         if model:
             if model.dollars_per_million_tokens_input:
                 billable_input = log.input_tokens - log.cached_input_tokens
-                cost += (
-                    float(model.dollars_per_million_tokens_input)
-                    * billable_input
-                    / 1_000_000
-                )
+                cost += float(model.dollars_per_million_tokens_input) * billable_input / 1_000_000
             if model.dollars_per_million_tokens_output:
                 cost += (
-                    float(model.dollars_per_million_tokens_output)
-                    * log.output_tokens
-                    / 1_000_000
+                    float(model.dollars_per_million_tokens_output) * log.output_tokens / 1_000_000
                 )
 
     timestamp = datetime.now()
     result = await service.log_usage(project_id, log, cost, timestamp)
-    
+
     # Handle both old string return and new dict return for compatibility
     if isinstance(result, dict):
         log_id = result.get("usage_id", "")

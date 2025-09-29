@@ -64,7 +64,7 @@ Security notes:
 ### Public Endpoints
 
 - GET `/` → service info
-- GET `/health` → DB health  
+- GET `/health` → DB health
 - GET `/registry` (and `/registry.json`) → aggregated provider registry (fetched from GitHub Pages)
 - GET `/receipts/public-key.pem` → current public key in PEM
 - GET `/receipts/public-key.jwk` → current public key in JWK format
@@ -75,8 +75,8 @@ Security notes:
 #### Usage Tracking (`/api/v1`)
 - POST `/api/v1/log` → Log LLM usage
   ```json
-  { "provider": "openai", "model": "gpt-4", "input_tokens": 100, 
-    "output_tokens": 50, "cached_input_tokens": 0, 
+  { "provider": "openai", "model": "gpt-4", "input_tokens": 100,
+    "output_tokens": 50, "cached_input_tokens": 0,
     "alias": "summarizer", "profile": "prod", "cost": 0.0025 }
   ```
 - GET `/api/v1/stats?start_date=&end_date=&group_by=day` → Usage statistics
@@ -89,7 +89,7 @@ Security notes:
 #### Conversations (`/conversations`)
 - POST `/` → Create new conversation
   ```json
-  { "title": "Chat Title", "system_prompt": "You are helpful", 
+  { "title": "Chat Title", "system_prompt": "You are helpful",
     "model_alias": "claude-3", "project_id": "uuid" }
   ```
 - GET `/` → List conversations
@@ -113,8 +113,8 @@ Security notes:
 ##### MCP Servers
 - POST `/servers` → Register MCP server
   ```json
-  { "name": "my-server", "url": "http://localhost:8080", 
-    "transport_type": "http", "auth_config": {...}, 
+  { "name": "my-server", "url": "http://localhost:8080",
+    "transport_type": "http", "auth_config": {...},
     "capabilities": {...}, "project_id": "uuid" }
   ```
 - GET `/servers` → List MCP servers
@@ -212,4 +212,3 @@ The project uses:
 - [ ] Configure `LLMRING_RECEIPTS_PUBLIC_KEY_B64` and `LLMRING_RECEIPTS_PRIVATE_KEY_B64` for receipts
 - [ ] Restrict egress if running in sensitive environments; registry fetches use outbound HTTP
 - [ ] Enable Redis with authentication (set `LLMRING_REDIS_URL`) if caching is needed
-

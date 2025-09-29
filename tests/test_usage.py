@@ -1,4 +1,3 @@
-
 import pytest
 
 PROJECT_HEADERS = {"X-API-Key": "proj_test"}

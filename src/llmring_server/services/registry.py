@@ -66,13 +66,17 @@ class RegistryService:
                         if not isinstance(info, dict):
                             continue
                         models[model_key] = self._create_llm_model(model_key, info, provider_key)
-                except (httpx.RequestError, httpx.HTTPStatusError, ValueError, KeyError):
+                except (
+                    httpx.RequestError,
+                    httpx.HTTPStatusError,
+                    ValueError,
+                    KeyError,
+                ):
                     # Skip this provider if fetch fails or data is invalid
                     continue
 
         registry = RegistryResponse(
-            version=manifest_version
-            or (version or datetime.now().strftime("%Y.%m.%d")),
+            version=manifest_version or (version or datetime.now().strftime("%Y.%m.%d")),
             generated_at=datetime.now(),
             models=models,
             providers=providers,
@@ -80,9 +84,7 @@ class RegistryService:
 
         if self.redis:
             try:
-                await self.redis.setex(
-                    cache_key, settings.cache_ttl, registry.model_dump_json()
-                )
+                await self.redis.setex(cache_key, settings.cache_ttl, registry.model_dump_json())
             except (redis.RedisError, ValueError):
                 # Cache write failure is not critical
                 pass
@@ -110,7 +112,12 @@ class RegistryService:
                         if not isinstance(info, dict):
                             continue
                         models[model_key] = self._create_llm_model(model_key, info, provider_key)
-                except (httpx.RequestError, httpx.HTTPStatusError, ValueError, KeyError):
+                except (
+                    httpx.RequestError,
+                    httpx.HTTPStatusError,
+                    ValueError,
+                    KeyError,
+                ):
                     # Skip this provider if fetch fails or data is invalid
                     continue
 
@@ -125,9 +132,7 @@ class RegistryService:
     def filter_by_providers(
         self, registry: RegistryResponse, providers: List[str]
     ) -> RegistryResponse:
-        filtered_models = {
-            k: v for k, v in registry.models.items() if v.provider in providers
-        }
+        filtered_models = {k: v for k, v in registry.models.items() if v.provider in providers}
         registry.models = filtered_models
         return registry
 

@@ -24,7 +24,7 @@ def create_app(
     include_meta_routes: bool = True,
 ) -> FastAPI:
     """Create llmring-server app supporting both standalone and library modes.
-    
+
     Args:
         db_manager: External database (library mode) or None (standalone)
         run_migrations: Whether to apply migrations on startup
@@ -32,24 +32,24 @@ def create_app(
         settings: Override settings
         standalone: If True, include lifespan management. If False, assume external management.
         include_meta_routes: If True, include root and health endpoints. Set to False when mounting as sub-app.
-    
+
     Returns:
         Configured FastAPI application
     """
-    
+
     # Load settings if not provided
     if settings is None:
         settings = Settings()
-    
+
     # Use provided schema or default from settings
     schema = schema or settings.database_schema
-    
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         """Manage application lifecycle."""
         mode = "library" if db_manager else "standalone"
         logger.info(f"Starting LLMRing Server in {mode} mode...")
-        
+
         # In standalone mode, create and connect database
         if not db_manager:
             config = DatabaseConfig(
@@ -65,7 +65,7 @@ def create_app(
             # Library mode: use provided database
             app.state.db = db_manager
             logger.info("Using external database (library mode)")
-        
+
         # Run migrations if requested
         if run_migrations:
             migrations_path = Path(__file__).parent / "migrations"
@@ -73,29 +73,29 @@ def create_app(
                 migrations = AsyncMigrationManager(
                     app.state.db,
                     migrations_path=str(migrations_path),
-                    module_name="llmring_server"
+                    module_name="llmring_server",
                 )
                 result = await migrations.apply_pending_migrations()
                 if result.get("applied"):
                     logger.info(f"Applied migrations: {result['applied']}")
                 else:
                     logger.info("No pending migrations")
-        
+
         # Store settings in app state
         app.state.settings = settings
         app.state.external_db = db_manager is not None
-        
+
         logger.info("LLMRing Server started successfully")
-        
+
         try:
             yield
         finally:
             # Disconnect if in standalone mode
-            if not db_manager and hasattr(app.state, 'db'):
+            if not db_manager and hasattr(app.state, "db"):
                 await app.state.db.disconnect()
                 logger.info("Database disconnected")
             logger.info("LLMRing Server shut down")
-    
+
     # Create app
     if standalone:
         app = FastAPI(
@@ -111,10 +111,10 @@ def create_app(
             description="Self-hostable LLM model registry and usage tracking",
             version="0.1.0",
         )
-    
+
     # Store settings immediately for reference (lifespan will update if needed)
     app.state.settings = settings
-    
+
     # CORS for self-hosting (restrict in production; '*' is acceptable for local dev)
     app.add_middleware(
         CORSMiddleware,
@@ -123,7 +123,7 @@ def create_app(
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["X-API-Key", "Content-Type", "If-None-Match"],
     )
-    
+
     # In library mode, set db immediately since there's no lifespan
     if not standalone:
         if not db_manager:
@@ -131,23 +131,25 @@ def create_app(
         app.state.db = db_manager
         app.state.external_db = True
         app.state.settings = settings
-        
+
         # Run migrations if requested (in library mode)
         if run_migrations:
             import asyncio
+
             migrations_path = Path(__file__).parent / "migrations"
             if migrations_path.exists():
                 migrations = AsyncMigrationManager(
                     db_manager,
                     migrations_path=str(migrations_path),
-                    module_name="llmring_server"
+                    module_name="llmring_server",
                 )
                 # Create a task to run migrations asynchronously
                 asyncio.create_task(migrations.apply_pending_migrations())
-    
+
     # Import routers
-    from .routers import conversations, mcp, receipts, registry, templates, usage  # noqa: E402
-    
+    from .routers import registry  # noqa: E402
+    from .routers import conversations, mcp, receipts, templates, usage
+
     # Include routers
     app.include_router(registry.router)
     app.include_router(usage.router)
@@ -155,9 +157,10 @@ def create_app(
     app.include_router(conversations.router)
     app.include_router(mcp.router)
     app.include_router(templates.router)
-    
+
     # Add meta endpoints only if requested (not when used as sub-app)
     if include_meta_routes:
+
         @app.get("/")
         async def root():
             return {
@@ -166,26 +169,31 @@ def create_app(
                 "docs": "/docs",
                 "registry": "/registry",
             }
-        
+
         @app.get("/health")
         async def health():
             """Health check endpoint."""
             try:
                 await app.state.db.fetch_one("SELECT 1")
                 return {"status": "healthy", "database": "connected"}
-            except (asyncpg.PostgresError, asyncpg.InterfaceError, ConnectionError) as e:
+            except (
+                asyncpg.PostgresError,
+                asyncpg.InterfaceError,
+                ConnectionError,
+            ) as e:
                 logger.error(f"Health check failed: {e}")
                 return {"status": "unhealthy", "database": "disconnected"}
-    
+
     @app.get("/receipts/public-key.pem", response_class=PlainTextResponse)
     async def receipts_public_key_pem():
         if not settings.receipts_public_key_base64:
             raise HTTPException(404, "Public key not configured")
         # Render as PEM SubjectPublicKeyInfo
         import base64
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
         from cryptography.hazmat.primitives import serialization
-        
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
         public_bytes = base64.b64decode(settings.receipts_public_key_base64)
         public_key = Ed25519PublicKey.from_public_bytes(public_bytes)
         pem = public_key.public_bytes(
@@ -193,7 +201,7 @@ def create_app(
             format=serialization.PublicFormat.SubjectPublicKeyInfo,
         )
         return pem.decode("utf-8")
-    
+
     @app.get("/receipts/public-key.jwk", response_class=JSONResponse)
     async def receipts_public_key_jwk():
         if not settings.receipts_public_key_base64:
@@ -219,7 +227,7 @@ def create_app(
                 "x": settings.receipts_public_key_base64.replace("=", ""),
             }
         ]
-    
+
     return app
 
 
@@ -230,7 +238,7 @@ app = create_app()
 def main():
     """Run the server in standalone mode."""
     import uvicorn
-    
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 

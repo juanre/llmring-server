@@ -15,9 +15,7 @@ router = APIRouter(
 async def get_registry(
     request: Request,
     response: Response,
-    version: Optional[str] = Query(
-        None, description="Specific registry version; deprecated"
-    ),
+    version: Optional[str] = Query(None, description="Specific registry version; deprecated"),
     providers: Optional[str] = Query(
         None, description="Comma-separated list of providers to filter"
     ),
@@ -43,9 +41,7 @@ async def get_registry(
 
 
 @router.get("/v/{version}/registry.json", response_model=RegistryResponse)
-async def get_registry_version(
-    request: Request, response: Response, version: str = Path(...)
-):
+async def get_registry_version(request: Request, response: Response, version: str = Path(...)):
     service = RegistryService()
     try:
         registry = await service.get_registry_version(version)

@@ -39,6 +39,7 @@ async def get_mcp_service(db: AsyncDatabaseManager = Depends(get_db)) -> MCPServ
 
 # ============= MCP Server Endpoints =============
 
+
 @router.post("/servers", response_model=MCPServer)
 async def create_server(
     server: MCPServerCreate,
@@ -55,21 +56,18 @@ async def create_server(
             capabilities=server.capabilities,
             api_key_id=api_key,
         )
-        
+
         server_data = await mcp_service.get_server(server_id)
         if not server_data:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create server"
+                detail="Failed to create server",
             )
-        
+
         return MCPServer(**server_data)
     except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error creating MCP server: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.get("/servers", response_model=List[MCPServer])
@@ -87,10 +85,7 @@ async def list_servers(
         return [MCPServer(**s) for s in servers]
     except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error listing MCP servers: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.get("/servers/{server_id}", response_model=MCPServer)
@@ -103,19 +98,13 @@ async def get_server(
     try:
         server = await mcp_service.get_server(server_id, api_key_id=api_key)
         if not server:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Server not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
         return MCPServer(**server)
     except HTTPException:
         raise
     except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error getting MCP server: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.patch("/servers/{server_id}", response_model=MCPServer)
@@ -135,23 +124,17 @@ async def update_server(
             capabilities=update.capabilities,
             is_active=update.is_active,
         )
-        
+
         if not updated:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Server not found"
-            )
-        
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
+
         server = await mcp_service.get_server(server_id, api_key_id=api_key)
         return MCPServer(**server)
     except HTTPException:
         raise
     except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error updating MCP server: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.delete("/servers/{server_id}")
@@ -164,19 +147,13 @@ async def delete_server(
     try:
         deleted = await mcp_service.delete_server(server_id)
         if not deleted:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Server not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
         return {"message": "Server deleted successfully"}
     except HTTPException:
         raise
     except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error deleting MCP server: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.post("/servers/{server_id}/refresh", response_model=MCPCapabilities)
@@ -192,7 +169,7 @@ async def refresh_server_capabilities(
         tools = capabilities.get("tools", [])
         resources = capabilities.get("resources", [])
         prompts = capabilities.get("prompts", [])
-        
+
         # Refresh in database
         await mcp_service.refresh_server_capabilities(
             server_id=server_id,
@@ -200,19 +177,16 @@ async def refresh_server_capabilities(
             resources=resources,
             prompts=prompts,
         )
-        
+
         # Get updated data
         server = await mcp_service.get_server(server_id, api_key_id=api_key)
         if not server:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Server not found"
-            )
-        
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
+
         tools_list = await mcp_service.list_tools(server_id=server_id)
         resources_list = await mcp_service.list_resources(server_id=server_id)
         prompts_list = await mcp_service.list_prompts(server_id=server_id)
-        
+
         return MCPCapabilities(
             server=MCPServer(**server),
             tools=[MCPTool(**t) for t in tools_list],
@@ -223,13 +197,11 @@ async def refresh_server_capabilities(
         raise
     except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error refreshing server capabilities: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 # ============= Tool Endpoints =============
+
 
 @router.post("/tools", response_model=MCPTool)
 async def create_tool(
@@ -246,21 +218,19 @@ async def create_tool(
             input_schema=tool.input_schema,
             api_key_id=api_key,
         )
-        
+
         tool_data = await mcp_service.get_tool(tool_id)
         if not tool_data:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create tool"
+                detail="Failed to create tool",
             )
-        
+
         return MCPTool(**tool_data)
     except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error creating MCP tool: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
 
 @router.get("/tools", response_model=List[MCPToolWithServer])
 async def list_tools(
@@ -276,7 +246,7 @@ async def list_tools(
             api_key_id=api_key,
             is_active=is_active,
         )
-        
+
         # Build response with server info
         result = []
         for tool in tools:
@@ -286,7 +256,7 @@ async def list_tools(
                 "name": tool.get("server_name"),
                 "url": tool.get("server_url"),
             }
-            
+
             # Create tool with server
             tool_with_server = MCPToolWithServer(
                 id=tool["id"],
@@ -300,14 +270,11 @@ async def list_tools(
                 server=server_info,
             )
             result.append(tool_with_server)
-        
+
         return result
     except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error listing MCP tools: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.get("/tools/{tool_id}", response_model=MCPToolWithServer)
@@ -319,18 +286,15 @@ async def get_tool(
     try:
         tool = await mcp_service.get_tool(tool_id)
         if not tool:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Tool not found"
-            )
-        
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tool not found")
+
         # Extract server info
         server_info = {
             "id": tool["server_id"],
             "name": tool.get("server_name"),
             "url": tool.get("server_url"),
         }
-        
+
         return MCPToolWithServer(
             id=tool["id"],
             server_id=tool["server_id"],
@@ -346,10 +310,7 @@ async def get_tool(
         raise
     except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error getting MCP tool: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.post("/tools/{tool_id}/execute", response_model=MCPToolExecutionResponse)
@@ -366,10 +327,10 @@ async def execute_tool(
             input=request.input,
             conversation_id=request.conversation_id,
         )
-        
+
         # Note: Actual tool execution would happen here via MCP transport
         # For now, we just record the execution
-        
+
         return MCPToolExecutionResponse(
             id=execution_id,
             tool_id=tool_id,
@@ -382,10 +343,7 @@ async def execute_tool(
         )
     except (asyncpg.PostgresError, ValidationError, ValueError, ConnectionError) as e:
         logger.error(f"Error executing MCP tool: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.get("/tools/{tool_id}/history", response_model=List[MCPToolExecution])
@@ -403,13 +361,11 @@ async def get_tool_history(
         return [MCPToolExecution(**e) for e in executions]
     except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error getting tool history: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 # ============= Resource Endpoints =============
+
 
 @router.get("/resources", response_model=List[MCPResource])
 async def list_resources(
@@ -428,10 +384,7 @@ async def list_resources(
         return [MCPResource(**r) for r in resources]
     except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error listing MCP resources: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.get("/resources/{resource_id}", response_model=MCPResource)
@@ -443,19 +396,13 @@ async def get_resource(
     try:
         resource = await mcp_service.get_resource(resource_id)
         if not resource:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Resource not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
         return MCPResource(**resource)
     except HTTPException:
         raise
     except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error getting MCP resource: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.get("/resources/{resource_id}/content")
@@ -467,11 +414,8 @@ async def get_resource_content(
     try:
         resource = await mcp_service.get_resource(resource_id)
         if not resource:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Resource not found"
-            )
-        
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
+
         # Note: Actual content fetching would happen here via MCP transport
         # For now, return resource info
         return {"resource": resource, "content": None}
@@ -479,13 +423,11 @@ async def get_resource_content(
         raise
     except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error getting resource content: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 # ============= Prompt Endpoints =============
+
 
 @router.get("/prompts", response_model=List[MCPPrompt])
 async def list_prompts(
@@ -504,10 +446,7 @@ async def list_prompts(
         return [MCPPrompt(**p) for p in prompts]
     except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error listing MCP prompts: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.get("/prompts/{prompt_id}", response_model=MCPPrompt)
@@ -519,19 +458,13 @@ async def get_prompt(
     try:
         prompt = await mcp_service.get_prompt(prompt_id)
         if not prompt:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Prompt not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found")
         return MCPPrompt(**prompt)
     except HTTPException:
         raise
     except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error getting MCP prompt: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.post("/prompts/{prompt_id}/render")
@@ -544,11 +477,8 @@ async def render_prompt(
     try:
         prompt = await mcp_service.get_prompt(prompt_id)
         if not prompt:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Prompt not found"
-            )
-        
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found")
+
         # Note: Actual prompt rendering would happen here via MCP transport
         # For now, return prompt info
         return {"prompt": prompt, "arguments": arguments, "rendered": None}
@@ -556,7 +486,4 @@ async def render_prompt(
         raise
     except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error rendering prompt: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

@@ -182,9 +182,7 @@ class TemplateService:
             logger.error(f"Error updating conversation template: {e}")
             return None
 
-    async def delete_template(
-        self, template_id: UUID, project_id: Optional[str] = None
-    ) -> bool:
+    async def delete_template(self, template_id: UUID, project_id: Optional[str] = None) -> bool:
         """Delete a conversation template (soft delete)."""
         query = """
         UPDATE conversation_templates

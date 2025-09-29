@@ -96,14 +96,14 @@ async def llmring_server_client(test_db_factory):
     """Run llmring-server with isolated test database."""
     # Creates fresh database per test
     db = await test_db_factory.create_db(suffix="llmring", schema="llmring_test")
-    
+
     # Apply migrations
     migrations = AsyncMigrationManager(db, ...)
     await migrations.apply_pending_migrations()
-    
+
     # Inject test database into app
     server_app.state.db = db
-    
+
     # Provide HTTP client for testing
     async with AsyncClient(...) as client:
         yield client

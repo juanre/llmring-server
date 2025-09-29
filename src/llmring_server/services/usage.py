@@ -39,16 +39,16 @@ class UsageService:
         timestamp: datetime,
         conversation_id: Optional[UUID] = None,
         messages: Optional[List[Dict]] = None,
-        logging_level: Optional[MessageLoggingLevel] = None
+        logging_level: Optional[MessageLoggingLevel] = None,
     ) -> Dict:
         """Log usage and optionally store conversation messages.
-        
+
         Returns a dict with usage_id and optionally conversation details.
         """
         # Use default logging level from settings if not specified
         if logging_level is None:
             logging_level = settings.message_logging_level
-        
+
         # Insert usage log with optional conversation_id
         query = """
             INSERT INTO {{tables.usage_logs}} (
@@ -77,7 +77,7 @@ class UsageService:
             conversation_id,
         )
         usage_id = str(result["id"]) if result else ""
-        
+
         # Handle message storage if enabled
         messages_stored = 0
         if (
@@ -88,30 +88,29 @@ class UsageService:
         ):
             # Import here to avoid circular dependency
             from llmring_server.services.conversations import ConversationService
+
             conv_service = ConversationService(self.db, settings)
-            
+
             for msg in messages:
                 from llmring_server.models.conversations import MessageCreate
+
                 message_create = MessageCreate(
                     conversation_id=conversation_id,
                     role=msg.get("role"),
                     content=msg.get("content"),
                     input_tokens=msg.get("input_tokens"),
                     output_tokens=msg.get("output_tokens"),
-                    metadata=msg.get("metadata", {})
+                    metadata=msg.get("metadata", {}),
                 )
-                
-                stored = await conv_service.add_message(
-                    message_create,
-                    logging_level=logging_level
-                )
+
+                stored = await conv_service.add_message(message_create, logging_level=logging_level)
                 if stored:
                     messages_stored += 1
-        
+
         return {
             "usage_id": usage_id,
             "conversation_id": str(conversation_id) if conversation_id else None,
-            "messages_stored": messages_stored
+            "messages_stored": messages_stored,
         }
 
     async def get_stats(
@@ -133,12 +132,10 @@ class UsageService:
         if not start_date:
             start_dt = _to_naive(datetime.now(timezone.utc) - timedelta(days=30))
         else:
-            start_dt = _to_naive(
-                datetime.fromisoformat(start_date.replace("Z", "+00:00"))
-            )
+            start_dt = _to_naive(datetime.fromisoformat(start_date.replace("Z", "+00:00")))
 
         summary_query = """
-            SELECT 
+            SELECT
                 COUNT(*) as total_requests,
                 COALESCE(SUM(cost), 0) as total_cost,
                 COALESCE(SUM(input_tokens + output_tokens), 0) as total_tokens,
@@ -149,15 +146,33 @@ class UsageService:
                 AND created_at >= $2::timestamp
                 AND created_at <= $3::timestamp
         """
-        summary_result = await self.db.fetch_one(
-            summary_query, api_key_id, start_dt, end_dt
-        )
+        summary_result = await self.db.fetch_one(summary_query, api_key_id, start_dt, end_dt)
         # Guard against None result rows for mypy
-        tr = int(summary_result["total_requests"]) if summary_result and summary_result["total_requests"] is not None else 0
-        tc = Decimal(str(summary_result["total_cost"])) if summary_result and summary_result["total_cost"] is not None else Decimal("0")
-        tt = int(summary_result["total_tokens"]) if summary_result and summary_result["total_tokens"] is not None else 0
-        um = int(summary_result["unique_models"]) if summary_result and summary_result["unique_models"] is not None else 0
-        uo = int(summary_result["unique_origins"]) if summary_result and summary_result["unique_origins"] is not None else 0
+        tr = (
+            int(summary_result["total_requests"])
+            if summary_result and summary_result["total_requests"] is not None
+            else 0
+        )
+        tc = (
+            Decimal(str(summary_result["total_cost"]))
+            if summary_result and summary_result["total_cost"] is not None
+            else Decimal("0")
+        )
+        tt = (
+            int(summary_result["total_tokens"])
+            if summary_result and summary_result["total_tokens"] is not None
+            else 0
+        )
+        um = (
+            int(summary_result["unique_models"])
+            if summary_result and summary_result["unique_models"] is not None
+            else 0
+        )
+        uo = (
+            int(summary_result["unique_origins"])
+            if summary_result and summary_result["unique_origins"] is not None
+            else 0
+        )
         summary = UsageSummary(
             total_requests=tr,
             total_cost=tc,
@@ -167,7 +182,7 @@ class UsageService:
         )
 
         daily_query = """
-            SELECT 
+            SELECT
                 DATE(created_at) as date,
                 COUNT(*) as requests,
                 COALESCE(SUM(cost), 0) as cost,
@@ -179,9 +194,7 @@ class UsageService:
             GROUP BY DATE(created_at), model
             ORDER BY DATE(created_at) DESC, COUNT(*) DESC
         """
-        daily_results = await self.db.fetch_all(
-            daily_query, api_key_id, start_dt, end_dt
-        )
+        daily_results = await self.db.fetch_all(daily_query, api_key_id, start_dt, end_dt)
         by_day = []
         current_date = None
         day_data = None
@@ -200,7 +213,7 @@ class UsageService:
             by_day.append(day_data)
 
         model_query = """
-            SELECT 
+            SELECT
                 model,
                 COUNT(*) as requests,
                 COALESCE(SUM(cost), 0) as cost,
@@ -212,9 +225,7 @@ class UsageService:
                 AND created_at <= $3::timestamp
             GROUP BY model
         """
-        model_results = await self.db.fetch_all(
-            model_query, api_key_id, start_dt, end_dt
-        )
+        model_results = await self.db.fetch_all(model_query, api_key_id, start_dt, end_dt)
         by_model = {}
         for row in model_results:
             by_model[row["model"]] = ModelUsage(
@@ -225,7 +236,7 @@ class UsageService:
             )
 
         origin_query = """
-            SELECT 
+            SELECT
                 origin,
                 COUNT(*) as requests,
                 COALESCE(SUM(cost), 0) as cost
@@ -236,9 +247,7 @@ class UsageService:
                 AND origin IS NOT NULL
             GROUP BY origin
         """
-        origin_results = await self.db.fetch_all(
-            origin_query, api_key_id, start_dt, end_dt
-        )
+        origin_results = await self.db.fetch_all(origin_query, api_key_id, start_dt, end_dt)
         by_origin = {}
         for row in origin_results:
             by_origin[row["origin"]] = {
@@ -247,7 +256,7 @@ class UsageService:
             }
 
         alias_query = """
-            SELECT 
+            SELECT
                 alias,
                 COUNT(*) as requests,
                 COALESCE(SUM(cost), 0) as cost,
@@ -260,9 +269,7 @@ class UsageService:
                 AND alias IS NOT NULL
             GROUP BY alias
         """
-        alias_results = await self.db.fetch_all(
-            alias_query, api_key_id, start_dt, end_dt
-        )
+        alias_results = await self.db.fetch_all(alias_query, api_key_id, start_dt, end_dt)
         by_alias = {}
         for row in alias_results:
             by_alias[row["alias"]] = ModelUsage(
@@ -273,5 +280,9 @@ class UsageService:
             )
 
         return UsageStats(
-            summary=summary, by_day=by_day, by_model=by_model, by_origin=by_origin, by_alias=by_alias
+            summary=summary,
+            by_day=by_day,
+            by_model=by_model,
+            by_origin=by_origin,
+            by_alias=by_alias,
         )

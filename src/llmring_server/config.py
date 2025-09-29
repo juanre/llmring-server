@@ -6,10 +6,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class MessageLoggingLevel(str, Enum):
     """Message logging levels for conversation tracking."""
-    
-    NONE = "none"           # No message logging (default)
-    METADATA = "metadata"   # Log message metadata only (no content)
-    FULL = "full"          # Log full messages including content
+
+    NONE = "none"  # No message logging (default)
+    METADATA = "metadata"  # Log message metadata only (no content)
+    FULL = "full"  # Log full messages including content
 
 
 class Settings(BaseSettings):
@@ -82,17 +82,17 @@ class Settings(BaseSettings):
     message_logging_level: MessageLoggingLevel = Field(
         default=MessageLoggingLevel.FULL,
         validation_alias=AliasChoices("LLMRING_MESSAGE_LOGGING_LEVEL"),
-        description="Level of message logging: none, metadata, or full"
+        description="Level of message logging: none, metadata, or full",
     )
     message_retention_days: int = Field(
         default=30,
         validation_alias=AliasChoices("LLMRING_MESSAGE_RETENTION_DAYS"),
-        description="How many days to retain message history"
+        description="How many days to retain message history",
     )
     enable_conversation_tracking: bool = Field(
         default=True,
         validation_alias=AliasChoices("LLMRING_ENABLE_CONVERSATION_TRACKING"),
-        description="Whether to track conversations (even without message content)"
+        description="Whether to track conversations (even without message content)",
     )
 
     @field_validator("cors_origins", mode="before")
