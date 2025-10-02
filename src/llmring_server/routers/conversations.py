@@ -11,6 +11,8 @@ from llmring_server.dependencies import get_db, get_project_id
 from llmring_server.models.conversations import (
     Conversation,
     ConversationCreate,
+    ConversationLogRequest,
+    ConversationLogResponse,
     ConversationUpdate,
     ConversationWithMessages,
     Message,
@@ -170,3 +172,51 @@ async def cleanup_old_messages(
         "deleted_count": deleted_count,
         "retention_days": retention_days or settings.message_retention_days,
     }
+
+
+@router.post("/log", response_model=ConversationLogResponse)
+async def log_conversation(
+    log_request: ConversationLogRequest,
+    project_key: str = Depends(get_project_id),
+    db: AsyncDatabaseManager = Depends(get_db),
+) -> ConversationLogResponse:
+    """
+    Log a full conversation with messages and response.
+
+    This endpoint is used by the llmring decorators and LoggingService
+    to store complete conversations including messages, responses, and metadata.
+
+    The conversation will be stored with:
+    - All input messages
+    - The assistant's response
+    - Usage metadata (tokens, cost)
+    - Provider and model information
+
+    Phase 7.5: Receipts are now generated on-demand via POST /api/v1/receipts/generate,
+    not automatically with every log. This improves scalability and gives users control
+    over when to generate signed receipts for compliance/certification purposes.
+    """
+    settings = Settings()
+    if not settings.enable_conversation_tracking:
+        raise HTTPException(400, "Conversation tracking is disabled")
+
+    conversation_service = ConversationService(db, settings)
+
+    # Log the conversation (no automatic receipt generation)
+    result = await conversation_service.log_conversation(
+        api_key_id=project_key,
+        messages=log_request.messages,
+        response=log_request.response,
+        metadata=log_request.metadata.model_dump(),
+    )
+
+    conversation_id = result["conversation_id"]
+
+    # Receipt generation is now on-demand only
+    # Use POST /api/v1/receipts/generate to create receipts when needed
+
+    return ConversationLogResponse(
+        conversation_id=conversation_id,
+        message_id=result["message_id"],
+        receipt=None,  # Deprecated - use on-demand receipt generation instead
+    )

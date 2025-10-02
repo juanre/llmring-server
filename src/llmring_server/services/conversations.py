@@ -3,7 +3,7 @@
 import hashlib
 import json
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
 from pgdbm import AsyncDatabaseManager
@@ -336,3 +336,107 @@ class ConversationService:
 
         results = await self.db.fetch_all(query, api_key_id, limit, offset)
         return [Conversation(**r) for r in results]
+
+    async def log_conversation(
+        self,
+        api_key_id: str,
+        messages: List[Dict[str, Any]],
+        response: Dict[str, Any],
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Log a full conversation with messages and response.
+
+        This method:
+        1. Creates or finds a conversation
+        2. Stores all messages (input + response)
+        3. Updates conversation metadata
+        4. Returns conversation_id and message_id for receipt generation
+
+        Args:
+            api_key_id: API key that owns this conversation
+            messages: List of message dicts (role, content)
+            response: Response dict (content, model, finish_reason, usage)
+            metadata: Metadata dict (provider, model, alias, cost, tokens, etc.)
+
+        Returns:
+            Dict with conversation_id and message_id
+        """
+        if not self.settings.enable_conversation_tracking:
+            raise ValueError("Conversation tracking is disabled")
+
+        # Create a new conversation for this interaction
+        # Use alias or model as the title
+        title = f"{metadata.get('alias', metadata.get('model', 'unknown'))} conversation"
+
+        conversation_create = ConversationCreate(
+            api_key_id=api_key_id,
+            title=title,
+            model_alias=metadata.get("alias") or f"{metadata.get('provider')}:{metadata.get('model')}",
+            temperature=0.7,  # Default, could be passed in metadata
+        )
+
+        conversation = await self.create_conversation(conversation_create)
+        conversation_id = conversation.id
+
+        # Store all input messages
+        stored_messages = []
+        for msg in messages:
+            message_create = MessageCreate(
+                conversation_id=conversation_id,
+                role=msg.get("role", "user"),
+                content=msg.get("content"),
+                tool_calls=msg.get("tool_calls"),
+                metadata=msg.get("metadata", {}),
+            )
+
+            stored_message = await self.add_message(
+                message_create,
+                logging_level=self.settings.message_logging_level,
+            )
+            if stored_message:
+                stored_messages.append(stored_message)
+
+        # Store the assistant's response
+        assistant_message = MessageCreate(
+            conversation_id=conversation_id,
+            role="assistant",
+            content=response.get("content"),
+            tool_calls=response.get("tool_calls"),
+            input_tokens=metadata.get("input_tokens"),
+            output_tokens=metadata.get("output_tokens"),
+            metadata={
+                "model": response.get("model"),
+                "finish_reason": response.get("finish_reason"),
+                "usage": response.get("usage", {}),
+                "provider": metadata.get("provider"),
+                "cost": metadata.get("cost"),
+            },
+        )
+
+        response_message = await self.add_message(
+            assistant_message,
+            logging_level=self.settings.message_logging_level,
+        )
+
+        # Note: Conversation statistics are automatically updated by the database trigger
+        # (update_conversation_on_message) when messages are inserted. No manual update needed.
+
+        # Update total_cost separately since the trigger doesn't handle it
+        if metadata.get("cost"):
+            update_query = """
+                UPDATE {{tables.conversations}}
+                SET total_cost = total_cost + $1
+                WHERE id = $2
+            """
+            await self.db.execute(
+                update_query,
+                metadata.get("cost", 0.0),
+                conversation_id,
+            )
+
+        return {
+            "conversation_id": str(conversation_id),
+            "message_id": str(response_message.id) if response_message else None,
+            "messages_stored": len(stored_messages) + 1,
+        }

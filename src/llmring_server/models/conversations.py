@@ -97,3 +97,39 @@ class MessageBatch(BaseModel):
     messages: List[MessageCreate]
     create_receipt: bool = True
     logging_level: str = "full"  # none, metadata, full
+
+
+class ConversationMetadata(BaseModel):
+    """Metadata for conversation logging."""
+
+    provider: str
+    model: str
+    alias: Optional[str] = None
+    profile: Optional[str] = None
+    origin: str = "llmring"
+    cost: Optional[float] = None
+    input_cost: Optional[float] = None
+    output_cost: Optional[float] = None
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+    cached_tokens: Optional[int] = None
+
+
+class ConversationLogRequest(BaseModel):
+    """Request model for logging a full conversation."""
+
+    messages: List[Dict[str, Any]]  # Full conversation history
+    response: Dict[str, Any]  # LLM response
+    metadata: ConversationMetadata  # Provider, model, alias, cost, tokens, etc.
+
+
+class ConversationLogResponse(BaseModel):
+    """Response model for conversation logging."""
+
+    conversation_id: str
+    message_id: str
+    receipt: Optional[Dict[str, Any]] = Field(
+        None,
+        deprecated=True,
+        description="Deprecated in Phase 7.5. Use POST /api/v1/receipts/generate for on-demand receipts.",
+    )
