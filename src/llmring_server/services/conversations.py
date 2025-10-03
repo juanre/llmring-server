@@ -414,15 +414,32 @@ class ConversationService:
 
         # Check if cost is provided in metadata (either as "cost" or separate input/output costs)
         if metadata.get("input_cost") is not None and metadata.get("output_cost") is not None:
-            # Use provided input/output costs
+            # Use provided input/output costs (most accurate)
             input_cost = metadata.get("input_cost")
             output_cost = metadata.get("output_cost")
             total_cost = input_cost + output_cost
         elif metadata.get("cost"):
-            # Cost provided as total, estimate split
+            # Total cost provided but no split - calculate proper split from registry pricing
             total_cost = metadata.get("cost")
-            input_cost = total_cost * 0.25  # Rough estimate
-            output_cost = total_cost * 0.75
+            # Get the proper ratio from registry
+            reg_input_cost, reg_output_cost, reg_total = (
+                await receipts_service.calculate_cost_from_registry(
+                    provider=metadata.get("provider", "unknown"),
+                    model=response.get("model", metadata.get("model", "unknown")),
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                )
+            )
+            # Use registry ratio to split the provided cost accurately
+            if reg_total > 0:
+                input_ratio = reg_input_cost / reg_total
+                output_ratio = reg_output_cost / reg_total
+                input_cost = total_cost * input_ratio
+                output_cost = total_cost * output_ratio
+            else:
+                # Fallback: can't determine ratio, store total as output cost
+                input_cost = 0.0
+                output_cost = total_cost
         else:
             # Calculate from registry
             input_cost, output_cost, total_cost = (
