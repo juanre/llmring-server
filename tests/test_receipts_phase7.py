@@ -1,10 +1,11 @@
 """Tests for Phase 7: Server-Side Receipt Generation and Signing."""
 
-import pytest
 from pathlib import Path
 from uuid import UUID
 
-from llmring_server.config import Settings, load_or_generate_keypair, ensure_receipt_keys
+import pytest
+
+from llmring_server.config import Settings, ensure_receipt_keys, load_or_generate_keypair
 from llmring_server.models.receipts import Receipt, UnsignedReceipt
 from llmring_server.services.receipts import ReceiptsService
 
@@ -255,16 +256,7 @@ async def test_receipt_isolation_by_api_key(llmring_db):
 @pytest.mark.asyncio
 async def test_conversation_logging_with_receipt(test_app):
     """Test that conversation logging generates receipts."""
-    # Need to setup keys for the test app
-    # This is a bit tricky since the app creates its own Settings
-    # We'll use environment variables
-    import os
-    from llmring_server.config import load_or_generate_keypair
-
-    private_b64, public_b64 = load_or_generate_keypair()
-    os.environ["LLMRING_RECEIPTS_PRIVATE_KEY_B64"] = private_b64
-    os.environ["LLMRING_RECEIPTS_PUBLIC_KEY_B64"] = public_b64
-
+    # Keys are set up by the session-scoped fixture in conftest.py
     # Log a conversation
     response = await test_app.post(
         "/api/v1/conversations/log",
@@ -296,11 +288,23 @@ async def test_conversation_logging_with_receipt(test_app):
     assert "conversation_id" in data
     assert "message_id" in data
 
-    # Should have receipt
-    assert "receipt" in data
-    assert data["receipt"] is not None
+    # Phase 7.5: Receipt should be None (no automatic generation)
+    assert data.get("receipt") is None
 
-    receipt = data["receipt"]
+    # Generate receipt on-demand (must use same API key as conversation logging)
+    conversation_id = data["conversation_id"]
+    receipt_response = await test_app.post(
+        "/api/v1/receipts/generate",
+        json={"conversation_id": conversation_id},
+        headers={"X-API-Key": "test-project"},
+    )
+
+    if receipt_response.status_code != 200:
+        print(f"Error generating receipt: {receipt_response.status_code} - {receipt_response.text}")
+    assert receipt_response.status_code == 200
+    receipt_data = receipt_response.json()
+    receipt = receipt_data["receipt"]
+
     assert receipt["receipt_id"].startswith("rcpt_")
     assert receipt["alias"] == "chatbot"
     assert receipt["provider"] == "openai"
@@ -310,24 +314,21 @@ async def test_conversation_logging_with_receipt(test_app):
     assert receipt["signature"] is not None
     assert receipt["signature"].startswith("ed25519:")
 
-    # Clean up
-    del os.environ["LLMRING_RECEIPTS_PRIVATE_KEY_B64"]
-    del os.environ["LLMRING_RECEIPTS_PUBLIC_KEY_B64"]
-
 
 @pytest.mark.asyncio
 async def test_list_receipts_endpoint(test_app):
     """Test the GET /api/v1/receipts endpoint."""
     import os
+
     from llmring_server.config import load_or_generate_keypair
 
     private_b64, public_b64 = load_or_generate_keypair()
     os.environ["LLMRING_RECEIPTS_PRIVATE_KEY_B64"] = private_b64
     os.environ["LLMRING_RECEIPTS_PUBLIC_KEY_B64"] = public_b64
 
-    # Create some receipts by logging conversations
+    # Create some receipts by logging conversations and generating receipts on-demand
     for i in range(3):
-        await test_app.post(
+        log_response = await test_app.post(
             "/api/v1/conversations/log",
             json={
                 "messages": [{"role": "user", "content": f"Test {i}"}],
@@ -342,6 +343,14 @@ async def test_list_receipts_endpoint(test_app):
                     "output_cost": 0.0002,
                 },
             },
+            headers={"X-API-Key": "test-list-receipts"},
+        )
+
+        # Generate receipt on-demand (Phase 7.5)
+        conversation_id = log_response.json()["conversation_id"]
+        await test_app.post(
+            "/api/v1/receipts/generate",
+            json={"conversation_id": conversation_id},
             headers={"X-API-Key": "test-list-receipts"},
         )
 
@@ -362,15 +371,12 @@ async def test_list_receipts_endpoint(test_app):
     assert data["total"] == 3
     assert len(data["receipts"]) == 3
 
-    # Clean up
-    del os.environ["LLMRING_RECEIPTS_PRIVATE_KEY_B64"]
-    del os.environ["LLMRING_RECEIPTS_PUBLIC_KEY_B64"]
-
 
 @pytest.mark.asyncio
 async def test_get_public_key_endpoints(test_app):
     """Test public key retrieval endpoints."""
     import os
+
     from llmring_server.config import load_or_generate_keypair
 
     private_b64, public_b64 = load_or_generate_keypair()
@@ -394,22 +400,12 @@ async def test_get_public_key_endpoints(test_app):
     assert data["keys"][0]["algorithm"] == "Ed25519"
     assert data["keys"][0]["format"] == "base64url"
 
-    # Clean up
-    del os.environ["LLMRING_RECEIPTS_PRIVATE_KEY_B64"]
-    del os.environ["LLMRING_RECEIPTS_PUBLIC_KEY_B64"]
-
 
 @pytest.mark.asyncio
 async def test_verify_receipt_endpoint(test_app):
     """Test the POST /api/v1/receipts/verify endpoint."""
-    import os
-    from llmring_server.config import load_or_generate_keypair
-
-    private_b64, public_b64 = load_or_generate_keypair()
-    os.environ["LLMRING_RECEIPTS_PRIVATE_KEY_B64"] = private_b64
-    os.environ["LLMRING_RECEIPTS_PUBLIC_KEY_B64"] = public_b64
-
-    # Log a conversation to get a receipt
+    # Keys are set up by the session-scoped fixture in conftest.py
+    # Log a conversation to get a receipt (Phase 7.5: on-demand)
     log_response = await test_app.post(
         "/api/v1/conversations/log",
         json={
@@ -429,7 +425,19 @@ async def test_verify_receipt_endpoint(test_app):
     )
 
     assert log_response.status_code == 200
-    receipt = log_response.json()["receipt"]
+    conversation_id = log_response.json()["conversation_id"]
+
+    # Generate receipt on-demand
+    receipt_response = await test_app.post(
+        "/api/v1/receipts/generate",
+        json={"conversation_id": conversation_id},
+        headers={"X-API-Key": "test-verify"},
+    )
+
+    if receipt_response.status_code != 200:
+        print(f"Error: {receipt_response.status_code} - {receipt_response.text}")
+    assert receipt_response.status_code == 200
+    receipt = receipt_response.json()["receipt"]
 
     # Verify the receipt
     verify_response = await test_app.post(
@@ -453,7 +461,3 @@ async def test_verify_receipt_endpoint(test_app):
     assert verify_response.status_code == 200
     verify_data = verify_response.json()
     assert verify_data["valid"] is False
-
-    # Clean up
-    del os.environ["LLMRING_RECEIPTS_PRIVATE_KEY_B64"]
-    del os.environ["LLMRING_RECEIPTS_PUBLIC_KEY_B64"]

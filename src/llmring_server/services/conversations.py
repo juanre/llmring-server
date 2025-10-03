@@ -372,12 +372,18 @@ class ConversationService:
         conversation_create = ConversationCreate(
             api_key_id=api_key_id,
             title=title,
-            model_alias=metadata.get("alias") or f"{metadata.get('provider')}:{metadata.get('model')}",
+            model_alias=metadata.get("alias")
+            or f"{metadata.get('provider')}:{metadata.get('model')}",
             temperature=0.7,  # Default, could be passed in metadata
         )
 
         conversation = await self.create_conversation(conversation_create)
         conversation_id = conversation.id
+
+        # Calculate total cost from input_cost + output_cost if not explicitly provided
+        total_cost = metadata.get("cost") or (
+            (metadata.get("input_cost") or 0.0) + (metadata.get("output_cost") or 0.0)
+        )
 
         # Store all input messages
         stored_messages = []
@@ -398,6 +404,9 @@ class ConversationService:
                 stored_messages.append(stored_message)
 
         # Store the assistant's response
+        # Note: response.model is the actual model returned by the LLM (e.g., "gpt-4-0613")
+        # metadata.model is what the user requested (e.g., "gpt-4")
+        # We prefer the actual model from the response
         assistant_message = MessageCreate(
             conversation_id=conversation_id,
             role="assistant",
@@ -406,11 +415,13 @@ class ConversationService:
             input_tokens=metadata.get("input_tokens"),
             output_tokens=metadata.get("output_tokens"),
             metadata={
-                "model": response.get("model"),
+                "model": response.get(
+                    "model", metadata["model"]
+                ),  # Fallback to metadata if response doesn't have it
                 "finish_reason": response.get("finish_reason"),
                 "usage": response.get("usage", {}),
-                "provider": metadata.get("provider"),
-                "cost": metadata.get("cost"),
+                "provider": metadata["provider"],  # Required by schema
+                "cost": total_cost,
             },
         )
 
@@ -423,7 +434,7 @@ class ConversationService:
         # (update_conversation_on_message) when messages are inserted. No manual update needed.
 
         # Update total_cost separately since the trigger doesn't handle it
-        if metadata.get("cost"):
+        if total_cost:
             update_query = """
                 UPDATE {{tables.conversations}}
                 SET total_cost = total_cost + $1
@@ -431,7 +442,7 @@ class ConversationService:
             """
             await self.db.execute(
                 update_query,
-                metadata.get("cost", 0.0),
+                total_cost,
                 conversation_id,
             )
 

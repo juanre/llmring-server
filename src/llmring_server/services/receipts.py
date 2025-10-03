@@ -106,16 +106,20 @@ class ReceiptsService:
         """
 
         # Store tokens and cost as JSONB for backward compatibility with existing schema
-        tokens_json = json.dumps({
-            "input": receipt.prompt_tokens,
-            "output": receipt.completion_tokens,
-            "cached_input": 0,
-        })
-        cost_json = json.dumps({
-            "input": receipt.input_cost,
-            "output": receipt.output_cost,
-            "total": receipt.total_cost,
-        })
+        tokens_json = json.dumps(
+            {
+                "input": receipt.prompt_tokens,
+                "output": receipt.completion_tokens,
+                "cached_input": 0,
+            }
+        )
+        cost_json = json.dumps(
+            {
+                "input": receipt.input_cost,
+                "output": receipt.output_cost,
+                "total": receipt.total_cost,
+            }
+        )
 
         # Convert timestamp to naive if timezone-aware (database uses TIMESTAMP not TIMESTAMPTZ)
         timestamp_to_store = receipt.timestamp
@@ -240,7 +244,9 @@ class ReceiptsService:
 
             # Build canonical JSON without signature field
             # Also exclude BatchReceipt-specific fields as signature is only on base Receipt
-            data = receipt.model_dump(exclude={"signature", "receipt_type", "batch_summary", "description", "tags"})
+            data = receipt.model_dump(
+                exclude={"signature", "receipt_type", "batch_summary", "description", "tags"}
+            )
             # Convert datetime to ISO format for canonicalization
             if isinstance(data.get("timestamp"), datetime):
                 data["timestamp"] = data["timestamp"].isoformat()
@@ -343,7 +349,9 @@ class ReceiptsService:
             logs = await self._fetch_uncertified_logs(api_key_id)
             log_type = "mixed"
         else:
-            raise ValueError("Must specify one of: conversation_id, date range, log_ids, or since_last_receipt")
+            raise ValueError(
+                "Must specify one of: conversation_id, date range, log_ids, or since_last_receipt"
+            )
 
         if not logs:
             raise ValueError("No logs found matching the criteria")
@@ -388,7 +396,9 @@ class ReceiptsService:
         """
         msg_result = await self.db.fetch_one(msg_query, conversation_id)
 
-        metadata = json.loads(msg_result["metadata"]) if msg_result and msg_result.get("metadata") else {}
+        metadata = (
+            json.loads(msg_result["metadata"]) if msg_result and msg_result.get("metadata") else {}
+        )
 
         return [
             {
@@ -646,7 +656,8 @@ class ReceiptsService:
         log_ids = []
 
         for log in logs:
-            model = log.get("model", "unknown")
+            # Model is required, but alias is optional (None if using provider:model directly)
+            model = log["model"]
             alias = log.get("alias", "default")
 
             # By model
@@ -694,11 +705,11 @@ class ReceiptsService:
         primary_log = logs[0] if logs else {}
 
         unsigned = UnsignedReceipt(
-            alias=primary_log.get("alias", "batch"),
+            alias=primary_log.get("alias", "batch"),  # Alias is optional
             profile="default",
             lock_digest="",
-            provider=primary_log.get("provider", "batch"),
-            model=primary_log.get("model", "batch") if receipt_type == "single" else f"batch:{len(logs)} calls",
+            provider=primary_log.get("provider", "batch"),  # Should always be present for single
+            model=primary_log["model"] if receipt_type == "single" else f"batch:{len(logs)} calls",
             prompt_tokens=total_input_tokens,
             completion_tokens=total_output_tokens,
             total_tokens=total_input_tokens + total_output_tokens,
@@ -739,16 +750,20 @@ class ReceiptsService:
         """
 
         # Store tokens and cost as JSONB
-        tokens_json = json.dumps({
-            "input": receipt.prompt_tokens,
-            "output": receipt.completion_tokens,
-            "cached_input": 0,
-        })
-        cost_json = json.dumps({
-            "input": receipt.input_cost,
-            "output": receipt.output_cost,
-            "total": receipt.total_cost,
-        })
+        tokens_json = json.dumps(
+            {
+                "input": receipt.prompt_tokens,
+                "output": receipt.completion_tokens,
+                "cached_input": 0,
+            }
+        )
+        cost_json = json.dumps(
+            {
+                "input": receipt.input_cost,
+                "output": receipt.output_cost,
+                "total": receipt.total_cost,
+            }
+        )
 
         # Convert timestamp to naive if timezone-aware
         timestamp_to_store = receipt.timestamp
@@ -787,9 +802,7 @@ class ReceiptsService:
         )
         return receipt.receipt_id
 
-    async def _link_receipt_to_logs(
-        self, receipt_id: str, logs: list[dict], log_type: str
-    ) -> None:
+    async def _link_receipt_to_logs(self, receipt_id: str, logs: list[dict], log_type: str) -> None:
         """Link a receipt to the logs it certifies."""
         # Insert into receipt_logs table
         for log in logs:
@@ -798,9 +811,7 @@ class ReceiptsService:
                 VALUES ($1, $2, $3)
                 ON CONFLICT (receipt_id, log_id) DO NOTHING
             """
-            await self.db.execute(
-                link_query, receipt_id, UUID(log["id"]), log["type"]
-            )
+            await self.db.execute(link_query, receipt_id, UUID(log["id"]), log["type"])
 
     async def preview_receipt(
         self,
@@ -824,14 +835,16 @@ class ReceiptsService:
         elif request.since_last_receipt:
             logs = await self._fetch_uncertified_logs(api_key_id)
         else:
-            raise ValueError("Must specify one of: conversation_id, date range, log_ids, or since_last_receipt")
+            raise ValueError(
+                "Must specify one of: conversation_id, date range, log_ids, or since_last_receipt"
+            )
 
         if not logs:
             return {
                 "total_logs": 0,
                 "total_cost": 0.0,
                 "total_tokens": 0,
-                "message": "No logs found matching the criteria"
+                "message": "No logs found matching the criteria",
             }
 
         # Calculate statistics without generating receipt
@@ -843,7 +856,8 @@ class ReceiptsService:
         by_alias = {}
 
         for log in logs:
-            model = log.get("model", "unknown")
+            # Model is required, alias is optional
+            model = log["model"]
             alias = log.get("alias", "default")
 
             if model not in by_model:
@@ -871,14 +885,11 @@ class ReceiptsService:
             "end_date": end_date,
             "by_model": by_model,
             "by_alias": by_alias,
-            "receipt_type": "single" if len(logs) == 1 else "batch"
+            "receipt_type": "single" if len(logs) == 1 else "batch",
         }
 
     async def get_uncertified_logs(
-        self,
-        api_key_id: str,
-        limit: int = 100,
-        offset: int = 0
+        self, api_key_id: str, limit: int = 100, offset: int = 0
     ) -> tuple[list[dict], int]:
         """
         Get logs that haven't been certified by any receipt.
@@ -889,16 +900,12 @@ class ReceiptsService:
         total = len(logs)
 
         # Apply pagination
-        paginated_logs = logs[offset:offset + limit]
+        paginated_logs = logs[offset : offset + limit]
 
         return paginated_logs, total
 
     async def get_logs_for_receipt(
-        self,
-        receipt_id: str,
-        api_key_id: str,
-        limit: int = 100,
-        offset: int = 0
+        self, receipt_id: str, api_key_id: str, limit: int = 100, offset: int = 0
     ) -> tuple[list[dict], int]:
         """
         Get all logs certified by a specific receipt.

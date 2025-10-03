@@ -1,9 +1,12 @@
 import getpass
 import os
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from pgdbm import AsyncMigrationManager
+
+from llmring_server.config import load_or_generate_keypair
 
 # Register external fixtures from pgdbm
 pytest_plugins = ("pgdbm.fixtures.conftest",)
@@ -15,6 +18,18 @@ os.environ.setdefault("TEST_DB_USER", getpass.getuser())
 # Provide blank passwords so DSN can be constructed for local trust setups
 os.environ.setdefault("TEST_DB_PASSWORD", "postgres")
 os.environ.setdefault("DB_PASSWORD", "postgres")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_receipt_keys():
+    """Set up receipt signing keys for all tests."""
+    private_b64, public_b64 = load_or_generate_keypair()
+    os.environ["LLMRING_RECEIPTS_PRIVATE_KEY_B64"] = private_b64
+    os.environ["LLMRING_RECEIPTS_PUBLIC_KEY_B64"] = public_b64
+    yield
+    # Cleanup
+    os.environ.pop("LLMRING_RECEIPTS_PRIVATE_KEY_B64", None)
+    os.environ.pop("LLMRING_RECEIPTS_PUBLIC_KEY_B64", None)
 
 
 @pytest_asyncio.fixture
