@@ -191,10 +191,10 @@ async def log_conversation(
     - The assistant's response
     - Usage metadata (tokens, cost)
     - Provider and model information
+    - Automatic cryptographically signed receipt
 
-    Phase 7.5: Receipts are now generated on-demand via POST /api/v1/receipts/generate,
-    not automatically with every log. This improves scalability and gives users control
-    over when to generate signed receipts for compliance/certification purposes.
+    Receipts are generated automatically for every LLM API call and linked
+    to the assistant message. This ensures complete cost tracking and audit trail.
     """
     settings = Settings()
     if not settings.enable_conversation_tracking:
@@ -202,7 +202,7 @@ async def log_conversation(
 
     conversation_service = ConversationService(db, settings)
 
-    # Log the conversation (no automatic receipt generation)
+    # Log the conversation with automatic receipt generation
     result = await conversation_service.log_conversation(
         api_key_id=project_key,
         messages=log_request.messages,
@@ -211,12 +211,13 @@ async def log_conversation(
     )
 
     conversation_id = result["conversation_id"]
+    receipt = result.get("receipt")  # Receipt object from service
 
-    # Receipt generation is now on-demand only
-    # Use POST /api/v1/receipts/generate to create receipts when needed
+    # Convert receipt to dict for response if present
+    receipt_dict = receipt.model_dump() if receipt else None
 
     return ConversationLogResponse(
         conversation_id=conversation_id,
         message_id=result["message_id"],
-        receipt=None,  # Deprecated - use on-demand receipt generation instead
+        receipt=receipt_dict,
     )

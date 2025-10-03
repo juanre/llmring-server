@@ -130,6 +130,5 @@ class ConversationLogResponse(BaseModel):
     message_id: str
     receipt: Optional[Dict[str, Any]] = Field(
         None,
-        deprecated=True,
-        description="Deprecated in Phase 7.5. Use POST /api/v1/receipts/generate for on-demand receipts.",
+        description="Automatically generated cryptographically signed receipt for this API call",
     )

@@ -18,6 +18,7 @@ from llmring_server.models.receipts import (
     ReceiptGenerationRequest,
     UnsignedReceipt,
 )
+from llmring_server.services.registry import RegistryService
 
 
 class ReceiptsService:
@@ -26,6 +27,48 @@ class ReceiptsService:
     def __init__(self, db: AsyncDatabaseManager, settings: Optional[Settings] = None):
         self.db = db
         self.settings = settings or Settings()
+        self.registry_service = RegistryService()
+
+    async def calculate_cost_from_registry(
+        self,
+        provider: str,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+    ) -> tuple[float, float, float]:
+        """
+        Calculate cost from registry pricing.
+
+        Args:
+            provider: Provider name (e.g., "openai", "anthropic")
+            model: Model name (e.g., "gpt-4o-2024-08-06")
+            input_tokens: Number of input tokens
+            output_tokens: Number of output tokens
+
+        Returns:
+            Tuple of (input_cost, output_cost, total_cost) in USD
+        """
+        try:
+            registry = await self.registry_service.get_registry()
+            model_key = f"{provider}:{model}"
+
+            model_info = registry.models.get(model_key)
+            if not model_info:
+                # Try without provider prefix
+                model_info = registry.models.get(model)
+
+            if not model_info or not model_info.dollars_per_million_tokens_input:
+                # Fallback to zero cost if model not found or pricing not available
+                return (0.0, 0.0, 0.0)
+
+            input_cost = (input_tokens / 1_000_000) * model_info.dollars_per_million_tokens_input
+            output_cost = (output_tokens / 1_000_000) * model_info.dollars_per_million_tokens_output
+            total_cost = input_cost + output_cost
+
+            return (input_cost, output_cost, total_cost)
+        except Exception:
+            # If registry lookup fails, return zero cost
+            return (0.0, 0.0, 0.0)
 
     async def generate_and_sign_receipt(
         self,
@@ -40,13 +83,13 @@ class ReceiptsService:
         input_cost: float,
         output_cost: float,
         conversation_id: Optional[UUID] = None,
-    ) -> Receipt:
+    ) -> tuple[Receipt, UUID]:
         """
         Generate and sign a receipt for an LLM API call.
 
         This is the canonical method for creating receipts server-side.
         It generates an unsigned receipt, signs it with Ed25519, stores it,
-        and returns the signed receipt.
+        and returns the signed receipt along with its database UUID.
 
         Args:
             api_key_id: API key that owns this receipt
@@ -62,7 +105,7 @@ class ReceiptsService:
             conversation_id: Optional conversation ID to link receipt
 
         Returns:
-            Signed Receipt object
+            Tuple of (Signed Receipt object, database UUID)
         """
         # Create unsigned receipt
         unsigned = UnsignedReceipt(
@@ -86,15 +129,15 @@ class ReceiptsService:
         # Create signed receipt
         signed_receipt = Receipt(**payload, signature=signature)
 
-        # Store in database
-        await self._store_receipt(api_key_id, signed_receipt, conversation_id)
+        # Store in database and get UUID
+        receipt_uuid = await self._store_receipt(api_key_id, signed_receipt, conversation_id)
 
-        return signed_receipt
+        return signed_receipt, receipt_uuid
 
     async def _store_receipt(
         self, api_key_id: str, receipt: Receipt, conversation_id: Optional[UUID] = None
-    ) -> str:
-        """Store a signed receipt in the database."""
+    ) -> UUID:
+        """Store a signed receipt in the database and return its UUID."""
         # Store in new flat schema matching the Receipt model
         query = """
             INSERT INTO {{tables.receipts}} (
@@ -126,7 +169,7 @@ class ReceiptsService:
         if timestamp_to_store.tzinfo is not None:
             timestamp_to_store = timestamp_to_store.replace(tzinfo=None)
 
-        await self.db.fetch_one(
+        result = await self.db.fetch_one(
             query,
             receipt.receipt_id,
             api_key_id,
@@ -143,7 +186,7 @@ class ReceiptsService:
             "v1",  # registry_version - deprecated but kept for schema compatibility
             json.dumps({}),  # metadata
         )
-        return receipt.receipt_id
+        return result["id"] if result else None
 
     async def store_receipt(self, api_key_id: str, receipt: Receipt) -> str:
         """Store an externally-generated signed receipt."""
@@ -708,8 +751,12 @@ class ReceiptsService:
             alias=primary_log.get("alias", "batch"),  # Alias is optional
             profile="default",
             lock_digest="",
-            provider=primary_log.get("provider", "batch"),  # Should always be present for single
-            model=primary_log["model"] if receipt_type == "single" else f"batch:{len(logs)} calls",
+            provider=primary_log.get("provider", "batch"),
+            model=(
+                primary_log.get("model", "batch")
+                if receipt_type == "single"
+                else f"batch:{len(logs)} calls"
+            ),
             prompt_tokens=total_input_tokens,
             completion_tokens=total_output_tokens,
             total_tokens=total_input_tokens + total_output_tokens,
