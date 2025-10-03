@@ -105,6 +105,7 @@ class BatchReceiptSummary(BaseModel):
     total_conversations: int = Field(..., description="Number of conversations certified")
     total_calls: int = Field(..., description="Number of API calls certified")
     total_tokens: int = Field(..., description="Total tokens across all calls")
+    total_cost: float = Field(..., description="Total cost across all calls")
     start_date: Optional[str] = Field(None, description="Start of date range (ISO format)")
     end_date: Optional[str] = Field(None, description="End of date range (ISO format)")
     by_model: Dict[str, Dict[str, Any]] = Field(

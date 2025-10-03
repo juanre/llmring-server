@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS {{tables.usage_logs}} (
 
     -- Metadata
     metadata JSONB DEFAULT '{}'::JSONB,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS {{tables.receipts}} (
@@ -55,8 +55,8 @@ CREATE TABLE IF NOT EXISTS {{tables.receipts}} (
     -- Tracking
     conversation_id UUID,  -- Links to conversations if message logging enabled
     metadata JSONB DEFAULT '{}'::JSONB,
-    receipt_timestamp TIMESTAMP NOT NULL,
-    stored_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    receipt_timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+    stored_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- =====================================================
