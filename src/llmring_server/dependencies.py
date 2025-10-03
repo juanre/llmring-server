@@ -1,6 +1,8 @@
 from fastapi import HTTPException, Request
 from pgdbm import AsyncDatabaseManager
 
+from llmring_server.config import Settings
+
 MAX_PROJECT_KEY_LENGTH = 255
 
 
@@ -32,3 +34,17 @@ async def get_db(request: Request) -> AsyncDatabaseManager:
     if not hasattr(request.app.state, "db") or not request.app.state.db:
         raise HTTPException(status_code=500, detail="Database not initialized")
     return request.app.state.db
+
+
+def get_settings(request: Request) -> Settings:
+    """Get settings from app state or create new instance.
+
+    This dependency checks app.state.settings first (for testing),
+    then falls back to creating a new Settings() instance (for production).
+
+    This allows tests to inject settings with receipt keys, while
+    production code can continue using environment variables.
+    """
+    if hasattr(request.app.state, "settings") and request.app.state.settings:
+        return request.app.state.settings
+    return Settings()

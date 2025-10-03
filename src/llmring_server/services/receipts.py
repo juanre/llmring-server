@@ -239,7 +239,8 @@ class ReceiptsService:
             sig_b64 = sig.split(":", 1)[1]
 
             # Build canonical JSON without signature field
-            data = receipt.model_dump(exclude={"signature"})
+            # Also exclude BatchReceipt-specific fields as signature is only on base Receipt
+            data = receipt.model_dump(exclude={"signature", "receipt_type", "batch_summary", "description", "tags"})
             # Convert datetime to ISO format for canonicalization
             if isinstance(data.get("timestamp"), datetime):
                 data["timestamp"] = data["timestamp"].isoformat()
@@ -423,7 +424,7 @@ class ReceiptsService:
               AND c.created_at <= $3
             ORDER BY c.created_at DESC
         """
-        conversations = await self.db.fetch_all(query=conv_query, api_key_id=api_key_id, start_date=start_date, end_date=end_date)
+        conversations = await self.db.fetch_all(conv_query, api_key_id, start_date, end_date)
 
         usage_query = """
             SELECT
@@ -443,7 +444,7 @@ class ReceiptsService:
               AND u.conversation_id IS NULL
             ORDER BY u.created_at DESC
         """
-        usage_logs = await self.db.fetch_all(query=usage_query, api_key_id=api_key_id, start_date=start_date, end_date=end_date)
+        usage_logs = await self.db.fetch_all(usage_query, api_key_id, start_date, end_date)
 
         # Combine and normalize
         all_logs = []
@@ -678,6 +679,7 @@ class ReceiptsService:
             total_conversations=len(conversation_ids),
             total_calls=len(logs),
             total_tokens=total_input_tokens + total_output_tokens,
+            total_cost=total_cost,
             start_date=start_date,
             end_date=end_date,
             by_model=by_model,

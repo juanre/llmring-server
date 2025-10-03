@@ -5,7 +5,7 @@ from fastapi.responses import PlainTextResponse, JSONResponse
 from pgdbm import AsyncDatabaseManager
 
 from llmring_server.config import Settings
-from llmring_server.dependencies import get_db, get_project_id
+from llmring_server.dependencies import get_db, get_project_id, get_settings
 from llmring_server.models.receipts import (
     BatchReceipt,
     Receipt,
@@ -80,13 +80,13 @@ async def get_public_keys_json(db: AsyncDatabaseManager = Depends(get_db_optiona
 async def verify_receipt(
     receipt: Receipt,
     db: AsyncDatabaseManager = Depends(get_db_optional),
+    settings: Settings = Depends(get_settings),
 ):
     """
     Verify a receipt's signature.
 
     Returns verification status. Does not require authentication.
     """
-    settings = Settings()
     service = ReceiptsService(db, settings)
 
     try:
@@ -133,6 +133,43 @@ async def store_receipt(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return ReceiptResponse(receipt_id=receipt_id, status="verified")
+
+
+@router.get("/uncertified")
+async def get_uncertified_logs(
+    limit: int = Query(100, ge=1, le=1000, description="Maximum logs to return"),
+    offset: int = Query(0, ge=0, description="Number of logs to skip"),
+    api_key_id: str = Depends(get_project_id),
+    db: AsyncDatabaseManager = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """
+    Get logs that haven't been certified by any receipt.
+
+    This endpoint helps users identify which conversations/usage logs
+    don't yet have a receipt. Useful for periodic certification workflows.
+
+    Returns:
+        List of uncertified logs with pagination info
+    """
+    service = ReceiptsService(db, settings)
+
+    try:
+        logs, total = await service.get_uncertified_logs(
+            api_key_id=api_key_id,
+            limit=limit,
+            offset=offset,
+        )
+
+        return {
+            "logs": logs,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch uncertified logs: {str(e)}")
 
 
 @router.get("/{receipt_id}", response_model=Receipt)
@@ -183,6 +220,7 @@ async def generate_receipt(
     request: ReceiptGenerationRequest,
     api_key_id: str = Depends(get_project_id),
     db: AsyncDatabaseManager = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ):
     """
     Generate a receipt on-demand for logs/conversations.
@@ -203,7 +241,6 @@ async def generate_receipt(
     Returns:
         ReceiptGenerationResponse with the signed receipt and count of certified items
     """
-    settings = Settings()
     service = ReceiptsService(db, settings)
 
     try:
@@ -228,6 +265,7 @@ async def preview_receipt(
     request: ReceiptGenerationRequest,
     api_key_id: str = Depends(get_project_id),
     db: AsyncDatabaseManager = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ):
     """
     Preview what a receipt would certify without generating it.
@@ -240,7 +278,6 @@ async def preview_receipt(
     Returns:
         Preview summary with counts, costs, and breakdowns
     """
-    settings = Settings()
     service = ReceiptsService(db, settings)
 
     try:
@@ -256,43 +293,6 @@ async def preview_receipt(
         raise HTTPException(status_code=500, detail=f"Failed to preview receipt: {str(e)}")
 
 
-@router.get("/uncertified")
-async def get_uncertified_logs(
-    limit: int = Query(100, ge=1, le=1000, description="Maximum logs to return"),
-    offset: int = Query(0, ge=0, description="Number of logs to skip"),
-    api_key_id: str = Depends(get_project_id),
-    db: AsyncDatabaseManager = Depends(get_db),
-):
-    """
-    Get logs that haven't been certified by any receipt.
-
-    This endpoint helps users identify which conversations/usage logs
-    don't yet have a receipt. Useful for periodic certification workflows.
-
-    Returns:
-        List of uncertified logs with pagination info
-    """
-    settings = Settings()
-    service = ReceiptsService(db, settings)
-
-    try:
-        logs, total = await service.get_uncertified_logs(
-            api_key_id=api_key_id,
-            limit=limit,
-            offset=offset,
-        )
-
-        return {
-            "logs": logs,
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch uncertified logs: {str(e)}")
-
-
 @router.get("/{receipt_id}/logs")
 async def get_receipt_logs(
     receipt_id: str = Path(..., description="The receipt ID"),
@@ -300,6 +300,7 @@ async def get_receipt_logs(
     offset: int = Query(0, ge=0, description="Number of logs to skip"),
     api_key_id: str = Depends(get_project_id),
     db: AsyncDatabaseManager = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ):
     """
     Get all logs certified by a specific receipt.
@@ -311,7 +312,6 @@ async def get_receipt_logs(
     Returns:
         List of logs certified by the receipt with pagination info
     """
-    settings = Settings()
     service = ReceiptsService(db, settings)
 
     try:
