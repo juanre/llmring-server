@@ -412,10 +412,15 @@ class ConversationService:
         input_tokens = metadata.get("input_tokens", 0)
         output_tokens = metadata.get("output_tokens", 0)
 
-        if metadata.get("cost"):
-            # Cost provided in metadata, use it
+        # Check if cost is provided in metadata (either as "cost" or separate input/output costs)
+        if metadata.get("input_cost") is not None and metadata.get("output_cost") is not None:
+            # Use provided input/output costs
+            input_cost = metadata.get("input_cost")
+            output_cost = metadata.get("output_cost")
+            total_cost = input_cost + output_cost
+        elif metadata.get("cost"):
+            # Cost provided as total, estimate split
             total_cost = metadata.get("cost")
-            # Estimate input/output split (simple heuristic)
             input_cost = total_cost * 0.25  # Rough estimate
             output_cost = total_cost * 0.75
         else:

@@ -49,8 +49,9 @@ class TestOnDemandReceiptGeneration:
         data = response.json()
         assert "conversation_id" in data
         assert "message_id" in data
-        # IMPORTANT: receipt should be None in Phase 7.5
-        assert data.get("receipt") is None
+        # UPDATED: Receipts are now generated automatically (not on-demand)
+        assert data.get("receipt") is not None
+        assert data["receipt"]["receipt_id"].startswith("rcpt_")
 
     @pytest.mark.asyncio
     async def test_generate_single_conversation_receipt(self, test_app, test_api_key):
