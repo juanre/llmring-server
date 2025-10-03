@@ -143,13 +143,26 @@ CREATE INDEX idx_messages_content_hash ON {{tables.messages}}(content_hash) WHER
 
 CREATE OR REPLACE FUNCTION {{schema}}.update_conversation_stats()
 RETURNS TRIGGER AS $$
+DECLARE
+    receipt_cost NUMERIC(10,8);
 BEGIN
+    -- Get cost from linked receipt if available
+    IF NEW.receipt_id IS NOT NULL THEN
+        SELECT (cost->>'total')::NUMERIC(10,8)
+        INTO receipt_cost
+        FROM {{tables.receipts}}
+        WHERE id = NEW.receipt_id;
+    ELSE
+        receipt_cost := 0;
+    END IF;
+
     -- Update conversation statistics when a message is added
     UPDATE {{tables.conversations}}
     SET
         message_count = message_count + 1,
         total_input_tokens = total_input_tokens + COALESCE(NEW.input_tokens, 0),
         total_output_tokens = total_output_tokens + COALESCE(NEW.output_tokens, 0),
+        total_cost = total_cost + COALESCE(receipt_cost, 0),  -- Calculate cost from receipt
         last_message_at = NEW.timestamp,
         updated_at = CURRENT_TIMESTAMP
     WHERE id = NEW.conversation_id;

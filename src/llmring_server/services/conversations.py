@@ -19,6 +19,7 @@ from llmring_server.models.conversations import (
     MessageCreate,
 )
 from llmring_server.models.usage import UsageLogRequest
+from llmring_server.services.receipts import ReceiptsService
 
 
 class ConversationService:
@@ -350,8 +351,9 @@ class ConversationService:
         This method:
         1. Creates or finds a conversation
         2. Stores all messages (input + response)
-        3. Updates conversation metadata
-        4. Returns conversation_id and message_id for receipt generation
+        3. Generates receipt for the LLM API call
+        4. Links receipt to assistant message
+        5. Returns conversation_id, message_id, and receipt_id
 
         Args:
             api_key_id: API key that owns this conversation
@@ -360,7 +362,7 @@ class ConversationService:
             metadata: Metadata dict (provider, model, alias, cost, tokens, etc.)
 
         Returns:
-            Dict with conversation_id and message_id
+            Dict with conversation_id, message_id, and receipt_id
         """
         if not self.settings.enable_conversation_tracking:
             raise ValueError("Conversation tracking is disabled")
@@ -372,7 +374,8 @@ class ConversationService:
         conversation_create = ConversationCreate(
             api_key_id=api_key_id,
             title=title,
-            model_alias=metadata.get("alias") or f"{metadata.get('provider')}:{metadata.get('model')}",
+            model_alias=metadata.get("alias")
+            or f"{metadata.get('provider')}:{metadata.get('model')}",
             temperature=0.7,  # Default, could be passed in metadata
         )
 
@@ -397,20 +400,59 @@ class ConversationService:
             if stored_message:
                 stored_messages.append(stored_message)
 
-        # Store the assistant's response
+        # Generate receipt for this LLM API call
+        receipts_service = ReceiptsService(self.db, self.settings)
+
+        # Calculate cost from registry if not provided
+        input_tokens = metadata.get("input_tokens", 0)
+        output_tokens = metadata.get("output_tokens", 0)
+
+        if metadata.get("cost"):
+            # Cost provided in metadata, use it
+            total_cost = metadata.get("cost")
+            # Estimate input/output split (simple heuristic)
+            input_cost = total_cost * 0.25  # Rough estimate
+            output_cost = total_cost * 0.75
+        else:
+            # Calculate from registry
+            input_cost, output_cost, total_cost = (
+                await receipts_service.calculate_cost_from_registry(
+                    provider=metadata.get("provider", "unknown"),
+                    model=response.get("model", metadata.get("model", "unknown")),
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                )
+            )
+
+        receipt, receipt_uuid = await receipts_service.generate_and_sign_receipt(
+            api_key_id=api_key_id,
+            alias=metadata.get("alias") or "default",
+            profile=metadata.get("profile") or "default",
+            lock_digest=metadata.get("lock_digest") or "",
+            provider=metadata.get("provider") or "unknown",
+            model=response.get("model") or metadata.get("model") or "unknown",
+            prompt_tokens=input_tokens,
+            completion_tokens=output_tokens,
+            input_cost=input_cost,
+            output_cost=output_cost,
+            conversation_id=conversation_id,
+        )
+
+        # Store the assistant's response with receipt link (UUID not VARCHAR)
         assistant_message = MessageCreate(
             conversation_id=conversation_id,
+            receipt_id=receipt_uuid,  # Link to the receipt's UUID in the database
             role="assistant",
             content=response.get("content"),
             tool_calls=response.get("tool_calls"),
-            input_tokens=metadata.get("input_tokens"),
-            output_tokens=metadata.get("output_tokens"),
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
             metadata={
                 "model": response.get("model"),
                 "finish_reason": response.get("finish_reason"),
                 "usage": response.get("usage", {}),
                 "provider": metadata.get("provider"),
-                "cost": metadata.get("cost"),
+                "cost": total_cost,
             },
         )
 
@@ -419,24 +461,14 @@ class ConversationService:
             logging_level=self.settings.message_logging_level,
         )
 
-        # Note: Conversation statistics are automatically updated by the database trigger
-        # (update_conversation_on_message) when messages are inserted. No manual update needed.
-
-        # Update total_cost separately since the trigger doesn't handle it
-        if metadata.get("cost"):
-            update_query = """
-                UPDATE {{tables.conversations}}
-                SET total_cost = total_cost + $1
-                WHERE id = $2
-            """
-            await self.db.execute(
-                update_query,
-                metadata.get("cost", 0.0),
-                conversation_id,
-            )
+        # Note: Conversation statistics (including cost) are automatically updated by the
+        # database trigger (update_conversation_stats) when the message with receipt is inserted.
+        # No manual cost update needed!
 
         return {
             "conversation_id": str(conversation_id),
             "message_id": str(response_message.id) if response_message else None,
+            "receipt_id": receipt.receipt_id,
+            "receipt": receipt,  # Return the full receipt object
             "messages_stored": len(stored_messages) + 1,
         }

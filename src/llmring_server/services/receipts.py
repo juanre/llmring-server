@@ -18,6 +18,7 @@ from llmring_server.models.receipts import (
     ReceiptGenerationRequest,
     UnsignedReceipt,
 )
+from llmring_server.services.registry import RegistryService
 
 
 class ReceiptsService:
@@ -26,6 +27,48 @@ class ReceiptsService:
     def __init__(self, db: AsyncDatabaseManager, settings: Optional[Settings] = None):
         self.db = db
         self.settings = settings or Settings()
+        self.registry_service = RegistryService()
+
+    async def calculate_cost_from_registry(
+        self,
+        provider: str,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+    ) -> tuple[float, float, float]:
+        """
+        Calculate cost from registry pricing.
+
+        Args:
+            provider: Provider name (e.g., "openai", "anthropic")
+            model: Model name (e.g., "gpt-4o-2024-08-06")
+            input_tokens: Number of input tokens
+            output_tokens: Number of output tokens
+
+        Returns:
+            Tuple of (input_cost, output_cost, total_cost) in USD
+        """
+        try:
+            registry = await self.registry_service.get_registry()
+            model_key = f"{provider}:{model}"
+
+            model_info = registry.models.get(model_key)
+            if not model_info:
+                # Try without provider prefix
+                model_info = registry.models.get(model)
+
+            if not model_info or not model_info.dollars_per_million_tokens_input:
+                # Fallback to zero cost if model not found or pricing not available
+                return (0.0, 0.0, 0.0)
+
+            input_cost = (input_tokens / 1_000_000) * model_info.dollars_per_million_tokens_input
+            output_cost = (output_tokens / 1_000_000) * model_info.dollars_per_million_tokens_output
+            total_cost = input_cost + output_cost
+
+            return (input_cost, output_cost, total_cost)
+        except Exception:
+            # If registry lookup fails, return zero cost
+            return (0.0, 0.0, 0.0)
 
     async def generate_and_sign_receipt(
         self,
@@ -40,13 +83,13 @@ class ReceiptsService:
         input_cost: float,
         output_cost: float,
         conversation_id: Optional[UUID] = None,
-    ) -> Receipt:
+    ) -> tuple[Receipt, UUID]:
         """
         Generate and sign a receipt for an LLM API call.
 
         This is the canonical method for creating receipts server-side.
         It generates an unsigned receipt, signs it with Ed25519, stores it,
-        and returns the signed receipt.
+        and returns the signed receipt along with its database UUID.
 
         Args:
             api_key_id: API key that owns this receipt
@@ -62,7 +105,7 @@ class ReceiptsService:
             conversation_id: Optional conversation ID to link receipt
 
         Returns:
-            Signed Receipt object
+            Tuple of (Signed Receipt object, database UUID)
         """
         # Create unsigned receipt
         unsigned = UnsignedReceipt(
@@ -86,15 +129,15 @@ class ReceiptsService:
         # Create signed receipt
         signed_receipt = Receipt(**payload, signature=signature)
 
-        # Store in database
-        await self._store_receipt(api_key_id, signed_receipt, conversation_id)
+        # Store in database and get UUID
+        receipt_uuid = await self._store_receipt(api_key_id, signed_receipt, conversation_id)
 
-        return signed_receipt
+        return signed_receipt, receipt_uuid
 
     async def _store_receipt(
         self, api_key_id: str, receipt: Receipt, conversation_id: Optional[UUID] = None
-    ) -> str:
-        """Store a signed receipt in the database."""
+    ) -> UUID:
+        """Store a signed receipt in the database and return its UUID."""
         # Store in new flat schema matching the Receipt model
         query = """
             INSERT INTO {{tables.receipts}} (
@@ -106,23 +149,27 @@ class ReceiptsService:
         """
 
         # Store tokens and cost as JSONB for backward compatibility with existing schema
-        tokens_json = json.dumps({
-            "input": receipt.prompt_tokens,
-            "output": receipt.completion_tokens,
-            "cached_input": 0,
-        })
-        cost_json = json.dumps({
-            "input": receipt.input_cost,
-            "output": receipt.output_cost,
-            "total": receipt.total_cost,
-        })
+        tokens_json = json.dumps(
+            {
+                "input": receipt.prompt_tokens,
+                "output": receipt.completion_tokens,
+                "cached_input": 0,
+            }
+        )
+        cost_json = json.dumps(
+            {
+                "input": receipt.input_cost,
+                "output": receipt.output_cost,
+                "total": receipt.total_cost,
+            }
+        )
 
         # Convert timestamp to naive if timezone-aware (database uses TIMESTAMP not TIMESTAMPTZ)
         timestamp_to_store = receipt.timestamp
         if timestamp_to_store.tzinfo is not None:
             timestamp_to_store = timestamp_to_store.replace(tzinfo=None)
 
-        await self.db.fetch_one(
+        result = await self.db.fetch_one(
             query,
             receipt.receipt_id,
             api_key_id,
@@ -139,7 +186,7 @@ class ReceiptsService:
             "v1",  # registry_version - deprecated but kept for schema compatibility
             json.dumps({}),  # metadata
         )
-        return receipt.receipt_id
+        return result["id"] if result else None
 
     async def store_receipt(self, api_key_id: str, receipt: Receipt) -> str:
         """Store an externally-generated signed receipt."""
@@ -240,7 +287,9 @@ class ReceiptsService:
 
             # Build canonical JSON without signature field
             # Also exclude BatchReceipt-specific fields as signature is only on base Receipt
-            data = receipt.model_dump(exclude={"signature", "receipt_type", "batch_summary", "description", "tags"})
+            data = receipt.model_dump(
+                exclude={"signature", "receipt_type", "batch_summary", "description", "tags"}
+            )
             # Convert datetime to ISO format for canonicalization
             if isinstance(data.get("timestamp"), datetime):
                 data["timestamp"] = data["timestamp"].isoformat()
@@ -343,7 +392,9 @@ class ReceiptsService:
             logs = await self._fetch_uncertified_logs(api_key_id)
             log_type = "mixed"
         else:
-            raise ValueError("Must specify one of: conversation_id, date range, log_ids, or since_last_receipt")
+            raise ValueError(
+                "Must specify one of: conversation_id, date range, log_ids, or since_last_receipt"
+            )
 
         if not logs:
             raise ValueError("No logs found matching the criteria")
@@ -388,7 +439,9 @@ class ReceiptsService:
         """
         msg_result = await self.db.fetch_one(msg_query, conversation_id)
 
-        metadata = json.loads(msg_result["metadata"]) if msg_result and msg_result.get("metadata") else {}
+        metadata = (
+            json.loads(msg_result["metadata"]) if msg_result and msg_result.get("metadata") else {}
+        )
 
         return [
             {
@@ -698,7 +751,11 @@ class ReceiptsService:
             profile="default",
             lock_digest="",
             provider=primary_log.get("provider", "batch"),
-            model=primary_log.get("model", "batch") if receipt_type == "single" else f"batch:{len(logs)} calls",
+            model=(
+                primary_log.get("model", "batch")
+                if receipt_type == "single"
+                else f"batch:{len(logs)} calls"
+            ),
             prompt_tokens=total_input_tokens,
             completion_tokens=total_output_tokens,
             total_tokens=total_input_tokens + total_output_tokens,
@@ -739,16 +796,20 @@ class ReceiptsService:
         """
 
         # Store tokens and cost as JSONB
-        tokens_json = json.dumps({
-            "input": receipt.prompt_tokens,
-            "output": receipt.completion_tokens,
-            "cached_input": 0,
-        })
-        cost_json = json.dumps({
-            "input": receipt.input_cost,
-            "output": receipt.output_cost,
-            "total": receipt.total_cost,
-        })
+        tokens_json = json.dumps(
+            {
+                "input": receipt.prompt_tokens,
+                "output": receipt.completion_tokens,
+                "cached_input": 0,
+            }
+        )
+        cost_json = json.dumps(
+            {
+                "input": receipt.input_cost,
+                "output": receipt.output_cost,
+                "total": receipt.total_cost,
+            }
+        )
 
         # Convert timestamp to naive if timezone-aware
         timestamp_to_store = receipt.timestamp
@@ -787,9 +848,7 @@ class ReceiptsService:
         )
         return receipt.receipt_id
 
-    async def _link_receipt_to_logs(
-        self, receipt_id: str, logs: list[dict], log_type: str
-    ) -> None:
+    async def _link_receipt_to_logs(self, receipt_id: str, logs: list[dict], log_type: str) -> None:
         """Link a receipt to the logs it certifies."""
         # Insert into receipt_logs table
         for log in logs:
@@ -798,9 +857,7 @@ class ReceiptsService:
                 VALUES ($1, $2, $3)
                 ON CONFLICT (receipt_id, log_id) DO NOTHING
             """
-            await self.db.execute(
-                link_query, receipt_id, UUID(log["id"]), log["type"]
-            )
+            await self.db.execute(link_query, receipt_id, UUID(log["id"]), log["type"])
 
     async def preview_receipt(
         self,
@@ -824,14 +881,16 @@ class ReceiptsService:
         elif request.since_last_receipt:
             logs = await self._fetch_uncertified_logs(api_key_id)
         else:
-            raise ValueError("Must specify one of: conversation_id, date range, log_ids, or since_last_receipt")
+            raise ValueError(
+                "Must specify one of: conversation_id, date range, log_ids, or since_last_receipt"
+            )
 
         if not logs:
             return {
                 "total_logs": 0,
                 "total_cost": 0.0,
                 "total_tokens": 0,
-                "message": "No logs found matching the criteria"
+                "message": "No logs found matching the criteria",
             }
 
         # Calculate statistics without generating receipt
@@ -871,14 +930,11 @@ class ReceiptsService:
             "end_date": end_date,
             "by_model": by_model,
             "by_alias": by_alias,
-            "receipt_type": "single" if len(logs) == 1 else "batch"
+            "receipt_type": "single" if len(logs) == 1 else "batch",
         }
 
     async def get_uncertified_logs(
-        self,
-        api_key_id: str,
-        limit: int = 100,
-        offset: int = 0
+        self, api_key_id: str, limit: int = 100, offset: int = 0
     ) -> tuple[list[dict], int]:
         """
         Get logs that haven't been certified by any receipt.
@@ -889,16 +945,12 @@ class ReceiptsService:
         total = len(logs)
 
         # Apply pagination
-        paginated_logs = logs[offset:offset + limit]
+        paginated_logs = logs[offset : offset + limit]
 
         return paginated_logs, total
 
     async def get_logs_for_receipt(
-        self,
-        receipt_id: str,
-        api_key_id: str,
-        limit: int = 100,
-        offset: int = 0
+        self, receipt_id: str, api_key_id: str, limit: int = 100, offset: int = 0
     ) -> tuple[list[dict], int]:
         """
         Get all logs certified by a specific receipt.
