@@ -1,6 +1,6 @@
 [project]
 name = "llmring-server"
-version = "0.1.1"
+version = "0.1.2"
 description = "LLMRing core server: alias sync, receipts, and usage logging (key-scoped, no users)"
 readme = "README.md"
 authors = [
@@ -19,7 +19,7 @@ dependencies = [
     "cryptography>=42.0.0",
     "click>=8.1.0",
     "asyncpg>=0.29",
-    "pgdbm>=0.1.0",
+    "pgdbm>=0.2.0",
 ]
 
 [project.license]
