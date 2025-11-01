@@ -2,6 +2,7 @@
 
 import base64
 import json
+import logging
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
@@ -19,6 +20,8 @@ from llmring_server.models.receipts import (
     UnsignedReceipt,
 )
 from llmring_server.services.registry import RegistryService
+
+logger = logging.getLogger(__name__)
 
 
 class ReceiptsService:
@@ -58,17 +61,24 @@ class ReceiptsService:
                 model_info = registry.models.get(model)
 
             if not model_info or not model_info.dollars_per_million_tokens_input:
-                # Fallback to zero cost if model not found or pricing not available
-                return (0.0, 0.0, 0.0)
+                logger.error(f"Pricing not found for {provider}:{model} in registry")
+                raise ValueError(
+                    f"Pricing data unavailable for {provider}:{model}. "
+                    f"Registry may be out of date or model not supported."
+                )
 
             input_cost = (input_tokens / 1_000_000) * model_info.dollars_per_million_tokens_input
             output_cost = (output_tokens / 1_000_000) * model_info.dollars_per_million_tokens_output
             total_cost = input_cost + output_cost
 
             return (input_cost, output_cost, total_cost)
-        except Exception:
-            # If registry lookup fails, return zero cost
-            return (0.0, 0.0, 0.0)
+        except ValueError:
+            # Re-raise ValueError (pricing data unavailable)
+            raise
+        except Exception as e:
+            # Log unexpected errors and re-raise
+            logger.error(f"Unexpected error calculating cost for {provider}:{model}: {e}")
+            raise
 
     async def generate_and_sign_receipt(
         self,

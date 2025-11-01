@@ -2,11 +2,14 @@
 
 import hashlib
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
 from pgdbm import AsyncDatabaseManager
+
+logger = logging.getLogger(__name__)
 
 from llmring_server.config import MessageLoggingLevel, Settings
 from llmring_server.models.conversations import (
@@ -422,34 +425,47 @@ class ConversationService:
             # Total cost provided but no split - calculate proper split from registry pricing
             total_cost = metadata.get("cost")
             # Get the proper ratio from registry
-            reg_input_cost, reg_output_cost, reg_total = (
-                await receipts_service.calculate_cost_from_registry(
-                    provider=metadata.get("provider", "unknown"),
-                    model=response.get("model", metadata.get("model", "unknown")),
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
+            try:
+                reg_input_cost, reg_output_cost, reg_total = (
+                    await receipts_service.calculate_cost_from_registry(
+                        provider=metadata.get("provider", "unknown"),
+                        model=response.get("model", metadata.get("model", "unknown")),
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                    )
                 )
-            )
-            # Use registry ratio to split the provided cost accurately
-            if reg_total > 0:
-                input_ratio = reg_input_cost / reg_total
-                output_ratio = reg_output_cost / reg_total
-                input_cost = total_cost * input_ratio
-                output_cost = total_cost * output_ratio
-            else:
-                # Fallback: can't determine ratio, store total as output cost
+                # Use registry ratio to split the provided cost accurately
+                if reg_total > 0:
+                    input_ratio = reg_input_cost / reg_total
+                    output_ratio = reg_output_cost / reg_total
+                    input_cost = total_cost * input_ratio
+                    output_cost = total_cost * output_ratio
+                else:
+                    # Fallback: can't determine ratio, store total as output cost
+                    input_cost = 0.0
+                    output_cost = total_cost
+            except ValueError as e:
+                # Model not in registry - fallback to storing total as output cost
+                logger.warning(f"Registry cost calculation failed: {e}. Using fallback.")
                 input_cost = 0.0
                 output_cost = total_cost
         else:
             # Calculate from registry
-            input_cost, output_cost, total_cost = (
-                await receipts_service.calculate_cost_from_registry(
-                    provider=metadata.get("provider", "unknown"),
-                    model=response.get("model", metadata.get("model", "unknown")),
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
+            try:
+                input_cost, output_cost, total_cost = (
+                    await receipts_service.calculate_cost_from_registry(
+                        provider=metadata.get("provider", "unknown"),
+                        model=response.get("model", metadata.get("model", "unknown")),
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                    )
                 )
-            )
+            except ValueError as e:
+                # Model not in registry - use zero cost but log warning
+                logger.warning(f"Cost calculation failed for unknown model: {e}. Using zero cost.")
+                input_cost = 0.0
+                output_cost = 0.0
+                total_cost = 0.0
 
         receipt, receipt_uuid = await receipts_service.generate_and_sign_receipt(
             api_key_id=api_key_id,
