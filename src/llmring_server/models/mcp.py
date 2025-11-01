@@ -167,9 +167,18 @@ class MCPPrompt(MCPPromptBase):
 
 
 class MCPToolExecutionRequest(BaseModel):
-    """Request to execute an MCP tool."""
+    """Request to record an MCP tool execution.
+
+    Note: This records execution metadata for observability.
+    Actual tool execution happens client-side via AsyncMCPClient.
+    """
 
     input: Dict[str, Any] = Field(..., description="Tool input arguments")
+    output: Optional[Dict[str, Any]] = Field(
+        None, description="Tool output (if execution completed)"
+    )
+    error: Optional[str] = Field(None, description="Error message (if execution failed)")
+    duration_ms: Optional[int] = Field(None, description="Execution duration in milliseconds")
     conversation_id: Optional[UUID] = Field(None, description="Associated conversation ID")
 
 

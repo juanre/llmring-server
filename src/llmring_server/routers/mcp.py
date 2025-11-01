@@ -314,35 +314,39 @@ async def get_tool(
 
 
 @router.post("/tools/{tool_id}/execute", response_model=MCPToolExecutionResponse)
-async def execute_tool(
+async def record_tool_execution(
     tool_id: UUID,
     request: MCPToolExecutionRequest,
     mcp_service: MCPService = Depends(get_mcp_service),
 ) -> MCPToolExecutionResponse:
-    """Execute an MCP tool."""
+    """Record an MCP tool execution for observability.
+
+    Note: This endpoint records execution metadata sent by clients.
+    Actual tool execution happens client-side via AsyncMCPClient.
+    """
     try:
-        # Record execution start
-        execution_id = await mcp_service.execute_tool(
+        # Record the execution with all provided data
+        execution_id = await mcp_service.record_tool_execution(
             tool_id=tool_id,
             input=request.input,
+            output=request.output,
+            error=request.error,
+            duration_ms=request.duration_ms,
             conversation_id=request.conversation_id,
         )
-
-        # Note: Actual tool execution would happen here via MCP transport
-        # For now, we just record the execution
 
         return MCPToolExecutionResponse(
             id=execution_id,
             tool_id=tool_id,
             conversation_id=request.conversation_id,
             input=request.input,
-            output=None,  # Would be filled by actual execution
-            error=None,
-            duration_ms=None,
+            output=request.output,
+            error=request.error,
+            duration_ms=request.duration_ms,
             executed_at=datetime.now(timezone.utc),
         )
     except (asyncpg.PostgresError, ValidationError, ValueError, ConnectionError) as e:
-        logger.error(f"Error executing MCP tool: {e}")
+        logger.error(f"Error recording MCP tool execution: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 

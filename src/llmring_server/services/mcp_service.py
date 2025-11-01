@@ -416,17 +416,26 @@ class MCPService:
             tool["input_schema"] = json.loads(tool["input_schema"])
         return tool
 
-    async def execute_tool(
+    async def record_tool_execution(
         self,
         tool_id: UUID,
         input: Dict[str, Any],
+        output: Optional[Dict[str, Any]] = None,
+        error: Optional[str] = None,
+        duration_ms: Optional[int] = None,
         conversation_id: Optional[UUID] = None,
     ) -> UUID:
-        """Record tool execution.
+        """Record tool execution for observability.
+
+        Note: This records execution metadata sent by clients.
+        Actual tool execution happens client-side via AsyncMCPClient.
 
         Args:
             tool_id: Tool ID
             input: Tool input
+            output: Tool output (if execution completed)
+            error: Error message (if execution failed)
+            duration_ms: Execution duration in milliseconds
             conversation_id: Optional conversation ID
 
         Returns:
@@ -434,13 +443,19 @@ class MCPService:
         """
         query = """
             INSERT INTO mcp_client.tool_executions (
-                tool_id, conversation_id, input
-            ) VALUES ($1, $2, $3)
+                tool_id, conversation_id, input, output, error, duration_ms
+            ) VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING id
         """
 
         result = await self.db.fetch_one(
-            query, tool_id, conversation_id, json.dumps(input) if input else None
+            query,
+            tool_id,
+            conversation_id,
+            json.dumps(input) if input else None,
+            json.dumps(output) if output else None,
+            error,
+            duration_ms,
         )
         return result["id"]
 
