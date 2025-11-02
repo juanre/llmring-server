@@ -22,37 +22,42 @@ class RegistryService:
             pass
 
     async def get_registry(self, version: Optional[str] = None) -> RegistryResponse:
-        cache_key = f"registry:{version or 'latest'}"
+        base = settings.registry_base_url.rstrip("/") + "/"
+        providers = self._get_default_providers()
+        models: Dict[str, LLMModel] = {}
+        manifest_version: Optional[str] = None
+
+        # First, fetch manifest to derive a stable cache key per version
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            try:
+                m = await client.get(base + "manifest.json")
+                if m.status_code == 200:
+                    manifest = m.json()
+                    # Prefer explicit numeric/string version if present
+                    if manifest.get("version") is not None:
+                        manifest_version = str(manifest.get("version"))
+                    elif manifest.get("schema_version") is not None:
+                        manifest_version = str(manifest.get("schema_version"))
+                    elif manifest.get("updated_at"):
+                        # Fall back to date-only portion of ISO timestamp if provided
+                        updated = str(manifest.get("updated_at"))
+                        manifest_version = updated.split("T")[0]
+            except (httpx.RequestError, httpx.HTTPStatusError, ValueError):
+                pass
+
+        # Use manifest version (if any) to key the cache; else honor optional version param
+        cache_key = f"registry:{manifest_version or (version or 'latest')}"
         if self.redis:
             try:
                 cached = await self.redis.get(cache_key)
                 if cached:
                     return RegistryResponse.model_validate_json(cached)
             except (redis.RedisError, ValueError, TypeError):
-                # Cache miss or invalid cache data, continue to fetch fresh
                 pass
 
-        base = settings.registry_base_url.rstrip("/") + "/"
-        providers = self._get_default_providers()
-        models: Dict[str, LLMModel] = {}
-        manifest_version: Optional[str] = None
+        # Fetch provider model lists
         async with httpx.AsyncClient(timeout=10.0) as client:
-            try:
-                m = await client.get(base + "manifest.json")
-                if m.status_code == 200:
-                    manifest = m.json()
-                    manifest_version = str(
-                        manifest.get("version")
-                        or manifest.get("schema_version")
-                        or manifest.get("updated_at")
-                        or ""
-                    )
-            except (httpx.RequestError, httpx.HTTPStatusError, ValueError):
-                # Manifest is optional, continue without version info
-                pass
-
             for provider_key in providers.keys():
-                # v3.5 registry: models are in a provider folder and also archived per version
                 url = f"{base}{provider_key}/models.json"
                 try:
                     resp = await client.get(url)
@@ -72,11 +77,11 @@ class RegistryService:
                     ValueError,
                     KeyError,
                 ):
-                    # Skip this provider if fetch fails or data is invalid
                     continue
 
         registry = RegistryResponse(
-            version=manifest_version or (version or datetime.now().strftime("%Y.%m.%d")),
+            version=manifest_version
+            or (str(version) if version else datetime.now().strftime("%Y.%m.%d")),
             generated_at=datetime.now(),
             models=models,
             providers=providers,
@@ -86,7 +91,6 @@ class RegistryService:
             try:
                 await self.redis.setex(cache_key, settings.cache_ttl, registry.model_dump_json())
             except (redis.RedisError, ValueError):
-                # Cache write failure is not critical
                 pass
 
         return registry
