@@ -1,6 +1,9 @@
 -- Complete schema for llmring-server with message support
 -- Clean implementation with no technical debt
 
+-- Ensure required extension for gen_random_uuid()
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- =====================================================
 -- CORE TABLES: Usage tracking and receipts
 -- =====================================================

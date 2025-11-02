@@ -80,8 +80,10 @@ async def _migrate(env: str):
 
     db_config = DatabaseConfig(
         connection_string=settings.database_url,
+        schema=settings.database_schema,
     )
-    db = await AsyncDatabaseManager.create(db_config, schema=settings.database_schema)
+    db = AsyncDatabaseManager(db_config)
+    await db.connect()
 
     try:
         click.echo(f"Connected to {env} database")
@@ -99,7 +101,7 @@ async def _migrate(env: str):
             click.echo("No pending migrations")
 
     finally:
-        await db.close()
+        await db.disconnect()
 
 
 @db.command()
@@ -212,8 +214,10 @@ async def _create_dev_db():
     settings = _get_settings_for_env("dev")
     db_config = DatabaseConfig(
         connection_string=settings.database_url,
+        schema=settings.database_schema,
     )
-    db = await AsyncDatabaseManager.create(db_config, schema=settings.database_schema)
+    db = AsyncDatabaseManager(db_config)
+    await db.connect()
 
     try:
         # Run migrations
@@ -228,7 +232,7 @@ async def _create_dev_db():
         else:
             click.echo("No pending migrations")
     finally:
-        await db.close()
+        await db.disconnect()
 
 
 async def _create_test_db():
