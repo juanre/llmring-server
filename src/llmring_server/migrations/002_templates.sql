@@ -2,7 +2,7 @@
 -- Description: Add table for conversation templates functionality
 
 -- Create conversation_templates table
-CREATE TABLE IF NOT EXISTS conversation_templates (
+CREATE TABLE IF NOT EXISTS {{tables.conversation_templates}} (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id UUID,  -- NULL for global templates
     name VARCHAR(255) NOT NULL,
@@ -21,14 +21,14 @@ CREATE TABLE IF NOT EXISTS conversation_templates (
 );
 
 -- Create indexes
-CREATE INDEX IF NOT EXISTS idx_conversation_templates_project_id ON conversation_templates(project_id);
-CREATE INDEX IF NOT EXISTS idx_conversation_templates_created_by ON conversation_templates(created_by);
-CREATE INDEX IF NOT EXISTS idx_conversation_templates_is_active ON conversation_templates(is_active);
-CREATE INDEX IF NOT EXISTS idx_conversation_templates_usage_count ON conversation_templates(usage_count DESC);
-CREATE INDEX IF NOT EXISTS idx_conversation_templates_name ON conversation_templates(name);
+CREATE INDEX IF NOT EXISTS idx_conversation_templates_project_id ON {{tables.conversation_templates}}(project_id);
+CREATE INDEX IF NOT EXISTS idx_conversation_templates_created_by ON {{tables.conversation_templates}}(created_by);
+CREATE INDEX IF NOT EXISTS idx_conversation_templates_is_active ON {{tables.conversation_templates}}(is_active);
+CREATE INDEX IF NOT EXISTS idx_conversation_templates_usage_count ON {{tables.conversation_templates}}(usage_count DESC);
+CREATE INDEX IF NOT EXISTS idx_conversation_templates_name ON {{tables.conversation_templates}}(name);
 
 -- Add trigger to update updated_at timestamp
-CREATE OR REPLACE FUNCTION update_conversation_templates_updated_at()
+CREATE OR REPLACE FUNCTION {{schema}}.update_conversation_templates_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = NOW();
@@ -37,6 +37,6 @@ END;
 $$ language 'plpgsql';
 
 CREATE TRIGGER update_conversation_templates_updated_at
-    BEFORE UPDATE ON conversation_templates
+    BEFORE UPDATE ON {{tables.conversation_templates}}
     FOR EACH ROW
-    EXECUTE FUNCTION update_conversation_templates_updated_at();
+    EXECUTE FUNCTION {{schema}}.update_conversation_templates_updated_at();

@@ -32,7 +32,7 @@ class TemplateService:
         now = datetime.now()
 
         query = """
-        INSERT INTO conversation_templates (
+        INSERT INTO {{tables.conversation_templates}} (
             id, project_id, name, description, system_prompt,
             model, temperature, max_tokens, tool_config, created_by,
             is_active, usage_count, created_at, updated_at
@@ -72,7 +72,7 @@ class TemplateService:
     ) -> Optional[ConversationTemplate]:
         """Get a conversation template by ID."""
         query = """
-        SELECT * FROM conversation_templates
+        SELECT * FROM {{tables.conversation_templates}}
         WHERE id = $1 AND is_active = true
         """
         params = [template_id]
@@ -101,7 +101,7 @@ class TemplateService:
     ) -> List[ConversationTemplate]:
         """List conversation templates."""
         query = """
-        SELECT * FROM conversation_templates
+        SELECT * FROM {{tables.conversation_templates}}
         WHERE is_active = true
         """
         params = []
@@ -166,7 +166,7 @@ class TemplateService:
         where_clause = f"WHERE id = ${param_num}"
 
         query = f"""
-        UPDATE conversation_templates
+        UPDATE {{tables.conversation_templates}}
         SET {', '.join(updates)}
         {where_clause}
         RETURNING *
@@ -185,7 +185,7 @@ class TemplateService:
     async def delete_template(self, template_id: UUID, project_id: Optional[str] = None) -> bool:
         """Delete a conversation template (soft delete)."""
         query = """
-        UPDATE conversation_templates
+        UPDATE {{tables.conversation_templates}}
         SET is_active = false, updated_at = $1
         WHERE id = $2 AND is_active = true
         """
@@ -209,7 +209,7 @@ class TemplateService:
     ) -> Optional[ConversationTemplate]:
         """Mark a template as used and update usage statistics."""
         query = """
-        UPDATE conversation_templates
+        UPDATE {{tables.conversation_templates}}
         SET usage_count = usage_count + 1,
             last_used_at = $1,
             updated_at = $1
@@ -241,7 +241,7 @@ class TemplateService:
         query = """
         SELECT id as template_id, name as template_name, usage_count,
                last_used_at, created_at
-        FROM conversation_templates
+        FROM {{tables.conversation_templates}}
         WHERE is_active = true
         """
         params = []

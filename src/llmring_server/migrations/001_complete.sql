@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS {{tables.receipts}} (
     -- Model information
     alias VARCHAR(128),
     model VARCHAR(255) NOT NULL,
+    provider VARCHAR(50),
     profile VARCHAR(64) DEFAULT 'default',
     registry_version VARCHAR(20) NOT NULL,
     lock_digest VARCHAR(128),
@@ -56,7 +57,13 @@ CREATE TABLE IF NOT EXISTS {{tables.receipts}} (
     conversation_id UUID,  -- Links to conversations if message logging enabled
     metadata JSONB DEFAULT '{}'::JSONB,
     receipt_timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
-    stored_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    stored_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    -- Batch receipt support
+    receipt_type VARCHAR(20) DEFAULT 'single' CHECK (receipt_type IN ('single', 'batch')),
+    batch_summary JSONB DEFAULT NULL,
+    description TEXT DEFAULT NULL,
+    tags JSONB DEFAULT NULL
 );
 
 -- =====================================================
@@ -127,6 +134,8 @@ CREATE INDEX idx_usage_logs_conversation ON {{tables.usage_logs}}(conversation_i
 CREATE INDEX idx_receipts_api_key ON {{tables.receipts}}(api_key_id);
 CREATE INDEX idx_receipts_receipt_id ON {{tables.receipts}}(receipt_id);
 CREATE INDEX idx_receipts_conversation ON {{tables.receipts}}(conversation_id) WHERE conversation_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_receipts_type ON {{tables.receipts}}(receipt_type);
+CREATE INDEX IF NOT EXISTS idx_receipts_tags ON {{tables.receipts}} USING GIN (tags);
 
 -- Conversations indexes
 CREATE INDEX idx_conversations_api_key ON {{tables.conversations}}(api_key_id, created_at DESC);
@@ -175,6 +184,30 @@ CREATE TRIGGER update_conversation_on_message
 AFTER INSERT ON {{tables.messages}}
 FOR EACH ROW
 EXECUTE FUNCTION {{schema}}.update_conversation_stats();
+
+-- =====================================================
+-- RECEIPT-TO-LOGS LINKING (batch receipts)
+-- =====================================================
+
+-- Links receipts (by receipt_id) to conversations/usage logs they certify
+CREATE TABLE IF NOT EXISTS {{tables.receipt_logs}} (
+    receipt_id VARCHAR(255) NOT NULL,
+    log_id UUID NOT NULL,
+    log_type VARCHAR(20) NOT NULL CHECK (log_type IN ('conversation', 'usage')),
+    certified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (receipt_id, log_id),
+    FOREIGN KEY (receipt_id) REFERENCES {{tables.receipts}}(receipt_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_receipt_logs_receipt ON {{tables.receipt_logs}}(receipt_id);
+CREATE INDEX IF NOT EXISTS idx_receipt_logs_log ON {{tables.receipt_logs}}(log_id);
+CREATE INDEX IF NOT EXISTS idx_receipt_logs_type ON {{tables.receipt_logs}}(log_type);
+
+COMMENT ON TABLE {{tables.receipt_logs}} IS 'Links receipts to the logs they certify (many-to-many)';
+COMMENT ON COLUMN {{tables.receipts}}.receipt_type IS 'Type of receipt: single (one call) or batch (multiple calls)';
+COMMENT ON COLUMN {{tables.receipts}}.batch_summary IS 'Aggregated statistics for batch receipts (JSON)';
+COMMENT ON COLUMN {{tables.receipts}}.description IS 'User-provided description for the receipt';
+COMMENT ON COLUMN {{tables.receipts}}.tags IS 'User-provided tags for categorization (JSON array)';
 
 -- =====================================================
 -- FUNCTIONS for common operations

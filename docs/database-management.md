@@ -117,8 +117,12 @@ This ensures:
 ## Migration Files
 
 Migrations are stored in `src/llmring_server/migrations/`:
-- `001_initial.sql`: Core tables (usage logs, receipts)
-- `002_profiles_and_receipts.sql`: Profiles and receipts support
+- `001_complete.sql`: Core schema (usage logs, receipts, conversations, messages) plus batch receipts support and indexes
+- `002_templates.sql`: Conversation templates table, indexes, and trigger
+- `003_mcp.sql`: MCP client schema and related tables
+
+Notes:
+- Previous incremental changes (provider column on receipts and receipt-to-logs linking) have been folded into `001_complete.sql` since we recreate the database from scratch.
 
 Migration naming convention:
 - Prefix with 3-digit number (001, 002, etc.)
