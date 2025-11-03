@@ -42,7 +42,7 @@ def get_settings(request: Request) -> Settings:
     This dependency checks app.state.settings first (for testing),
     then falls back to creating a new Settings() instance (for production).
 
-    This allows tests to inject settings with receipt keys, while
+    This allows tests to inject custom settings, while
     production code can continue using environment variables.
     """
     if hasattr(request.app.state, "settings") and request.app.state.settings:

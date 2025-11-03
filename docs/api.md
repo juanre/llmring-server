@@ -2,7 +2,7 @@
 
 ## Overview
 
-LLMRing Server provides a REST API for persistence, usage tracking, receipts, and MCP integration. All project-scoped endpoints require the `X-API-Key` header for authentication.
+LLMRing Server provides a REST API for persistence, usage tracking, and MCP integration. All project-scoped endpoints require the `X-API-Key` header for authentication.
 
 ## Base URL
 
@@ -456,55 +456,6 @@ X-API-Key: required
 ```
 
 Get usage statistics for templates.
-
-### Receipts
-
-#### Store Receipt
-
-```http
-POST /api/v1/receipts
-X-API-Key: required
-```
-
-Store a signed receipt.
-
-**Request Body:**
-```json
-{
-  "receipt": {
-    "id": "uuid",
-    "timestamp": "2025-08-26T12:00:00Z",
-    "model": "openai:gpt-4",
-    "tokens": {
-      "input": 100,
-      "output": 50
-    },
-    "cost": {
-      "amount": 0.0025,
-      "calculation": "standard"
-    },
-    "signature": "ed25519:base64url_signature"
-  }
-}
-```
-
-#### Get Receipt
-
-```http
-GET /api/v1/receipts/{receipt_id}
-X-API-Key: required
-```
-
-Retrieve a stored receipt.
-
-#### Issue Receipt
-
-```http
-POST /api/v1/receipts/issue
-X-API-Key: required
-```
-
-Issue a new signed receipt (requires signing key configuration).
 
 ## Error Responses
 

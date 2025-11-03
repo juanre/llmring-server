@@ -117,12 +117,10 @@ This ensures:
 ## Migration Files
 
 Migrations are stored in `src/llmring_server/migrations/`:
-- `001_complete.sql`: Core schema (usage logs, receipts, conversations, messages) plus batch receipts support and indexes
+- `001_complete.sql`: Core schema (usage logs, conversations, messages) plus indexes
 - `002_templates.sql`: Conversation templates table, indexes, and trigger
 - `003_mcp.sql`: MCP client schema and related tables
-
-Notes:
-- Previous incremental changes (provider column on receipts and receipt-to-logs linking) have been folded into `001_complete.sql` since we recreate the database from scratch.
+- `004_remove_receipts.sql`: Removes receipts feature (drops receipts and receipt_logs tables)
 
 Migration naming convention:
 - Prefix with 3-digit number (001, 002, etc.)
@@ -135,13 +133,13 @@ The server uses a key-scoped architecture (no user management):
 
 ### Core Tables
 - `usage_logs`: Request/response tracking (includes optional `alias` string and `profile`)
-- `receipts`: Signed usage receipts (includes optional `alias` string and `profile`)
+- `conversations`: Conversation tracking with messages
+- `messages`: Individual messages within conversations
 
 ### Key Concepts
 - All data is scoped by API key (via `X-API-Key` header)
 - No user accounts or authentication in core server
 - Profiles support (dev/staging/prod) per alias binding
-- Receipts provide cryptographic proof of usage
 
 ## Troubleshooting
 
