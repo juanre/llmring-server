@@ -192,17 +192,15 @@ async def log_conversation(
     - The assistant's response
     - Usage metadata (tokens, cost)
     - Provider and model information
-    - Automatic cryptographically signed receipt
 
-    Receipts are generated automatically for every LLM API call and linked
-    to the assistant message. This ensures complete cost tracking and audit trail.
+    This ensures complete cost tracking and audit trail.
     """
     if not settings.enable_conversation_tracking:
         raise HTTPException(400, "Conversation tracking is disabled")
 
     conversation_service = ConversationService(db, settings)
 
-    # Log the conversation with automatic receipt generation
+    # Log the conversation
     result = await conversation_service.log_conversation(
         api_key_id=project_key,
         messages=log_request.messages,
@@ -211,13 +209,8 @@ async def log_conversation(
     )
 
     conversation_id = result["conversation_id"]
-    receipt = result.get("receipt")  # Receipt object from service
-
-    # Convert receipt to dict for response if present
-    receipt_dict = receipt.model_dump() if receipt else None
 
     return ConversationLogResponse(
         conversation_id=conversation_id,
         message_id=result["message_id"],
-        receipt=receipt_dict,
     )

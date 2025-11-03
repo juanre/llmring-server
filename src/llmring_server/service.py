@@ -11,7 +11,6 @@ from pgdbm import AsyncDatabaseManager, AsyncMigrationManager
 
 from .config import Settings
 from .services.conversations import ConversationService
-from .services.receipts import ReceiptsService
 from .services.registry import RegistryService
 from .services.usage import UsageService
 
@@ -42,7 +41,6 @@ class LLMRingService:
 
         # Initialize services
         self.usage = UsageService(db)
-        self.receipts = ReceiptsService(db)
         self.registry = RegistryService()
         self.conversations = ConversationService(db, self.settings)
 
@@ -87,7 +85,6 @@ class LLMRingService:
             "database": db_status,
             "services": {
                 "usage": "ready",
-                "receipts": "ready",
                 "registry": "ready",
             },
         }

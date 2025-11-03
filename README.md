@@ -5,13 +5,12 @@ Self-hostable backend for the LLMRing project. It provides optional persistence 
 ## Key Features
 
 - **Usage Tracking**: Log LLM usage with costs and statistics
-- **Receipt System**: Cryptographically signed receipts (Ed25519 over RFC 8785 JCS)
 - **Registry Proxy**: Cached access to the public model registry (from GitHub Pages)
 - **Conversations**: Store and retrieve conversation history
 - **MCP Integration**: Persist MCP servers, tools, resources, and prompts
 - **Templates**: Reusable conversation templates
 
-This service is optional. LLMRing works fully in lockfile-only mode; run this server when you need persistence, receipts, usage tracking, or MCP integration.
+This service is optional. LLMRing works fully in lockfile-only mode; run this server when you need persistence, usage tracking, or MCP integration.
 
 ## Quick start
 
@@ -42,11 +41,8 @@ Configuration is provided via environment variables (Pydantic Settings). Key var
 - LLMRING_CACHE_TTL: Cache TTL seconds (default: 3600)
 - LLMRING_CORS_ORIGINS: Comma-separated origins (default: http://localhost:5173,http://localhost:5174,*)
 - LLMRING_REGISTRY_BASE_URL: Base URL for the public registry (default: https://llmring.github.io/registry/)
-- LLMRING_RECEIPTS_PRIVATE_KEY_B64: Base64url Ed25519 private key (for receipt issuance)
-- LLMRING_RECEIPTS_PUBLIC_KEY_B64: Base64url Ed25519 public key (for verification)
-- LLMRING_RECEIPTS_KEY_ID: Identifier for current signing key
 
-Minimal required: set `LLMRING_DATABASE_URL` to a reachable Postgres instance. If you plan to issue receipts, also set the signing key variables.
+Minimal required: set `LLMRING_DATABASE_URL` to a reachable Postgres instance.
 
 ## Authentication model
 
@@ -66,9 +62,6 @@ Security notes:
 - GET `/` → service info
 - GET `/health` → DB health
 - GET `/registry` (and `/registry.json`) → aggregated provider registry (fetched from GitHub Pages)
-- GET `/receipts/public-key.pem` → current public key in PEM
-- GET `/receipts/public-key.jwk` → current public key in JWK format
-- GET `/receipts/public-keys.json` → list of available public keys
 
 ### Project-Scoped Endpoints (require header `X-API-Key`)
 
@@ -80,11 +73,6 @@ Security notes:
     "alias": "summarizer", "profile": "prod", "cost": 0.0025 }
   ```
 - GET `/api/v1/stats?start_date=&end_date=&group_by=day` → Usage statistics
-
-#### Receipts (`/api/v1/receipts`)
-- POST `/` → Store a signed receipt
-- GET `/{receipt_id}` → Fetch stored receipt
-- POST `/issue` → Issue a signed receipt from unsigned payload
 
 #### Conversations (`/conversations`)
 - POST `/` → Create new conversation
@@ -144,18 +132,6 @@ Security notes:
 
 Security notes:
 - Stats and logs are key-scoped; ensure you send the right API key to avoid data leakage across projects
-- Receipts verification requires `LLMRING_RECEIPTS_PUBLIC_KEY_B64` to be configured; otherwise signatures are rejected
-
-## Receipts
-
-- Signature: Ed25519 over RFC 8785 JSON Canonicalization Scheme (JCS)
-- Signature format: `ed25519:<base64url>`
-- Receipt fields (subset):
-  - `id`, `timestamp`, `model`, `alias`, `profile`, `lock_digest`, `key_id`
-  - `tokens: { input, output, cached_input }`
-  - `cost: { amount, calculation }`
-  - `signature`
-- Public keys are available at `/receipts/public-key.pem` and `/receipts/public-keys.json`.
 
 ## Registry
 
@@ -167,7 +143,6 @@ The server uses PostgreSQL with two schemas:
 
 ### `llmring` schema (core data)
 - **usage_logs**: LLM usage tracking
-- **receipts**: Cryptographically signed receipts
 - **conversations**: Conversation metadata
 - **messages**: Conversation messages
 - **conversation_templates**: Reusable templates
@@ -201,7 +176,6 @@ The project uses:
 - pgdbm for Postgres migrations and access
 - httpx for outbound HTTP
 - redis (optional) for caching
-- cryptography + pynacl for receipts
 - Pydantic for data validation
 
 # Security Checklist
@@ -209,6 +183,5 @@ The project uses:
 - [ ] Set `LLMRING_CORS_ORIGINS` to explicit origins (not `*`) in production
 - [ ] Serve behind TLS (reverse proxy like nginx or cloud load balancer)
 - [ ] Store and rotate `X-API-Key` values securely; consider per-env keys
-- [ ] Configure `LLMRING_RECEIPTS_PUBLIC_KEY_B64` and `LLMRING_RECEIPTS_PRIVATE_KEY_B64` for receipts
 - [ ] Restrict egress if running in sensitive environments; registry fetches use outbound HTTP
 - [ ] Enable Redis with authentication (set `LLMRING_REDIS_URL`) if caching is needed

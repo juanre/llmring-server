@@ -22,7 +22,6 @@ from llmring_server.models.conversations import (
     MessageCreate,
 )
 from llmring_server.models.usage import UsageLogRequest
-from llmring_server.services.receipts import ReceiptsService
 
 
 class ConversationService:
@@ -158,16 +157,15 @@ class ConversationService:
 
         query = """
             INSERT INTO {{tables.messages}} (
-                conversation_id, receipt_id, role, content, content_hash,
+                conversation_id, role, content, content_hash,
                 input_tokens, output_tokens, tool_calls, tool_results, metadata
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING *
         """
 
         result = await self.db.fetch_one(
             query,
             message.conversation_id,
-            message.receipt_id,
             message.role,
             stored_content,  # None if metadata-only mode
             content_hash,
@@ -354,9 +352,6 @@ class ConversationService:
         This method:
         1. Creates or finds a conversation
         2. Stores all messages (input + response)
-        3. Generates receipt for the LLM API call
-        4. Links receipt to assistant message
-        5. Returns conversation_id, message_id, and receipt_id
 
         Args:
             api_key_id: API key that owns this conversation
@@ -365,7 +360,7 @@ class ConversationService:
             metadata: Metadata dict (provider, model, alias, cost, tokens, etc.)
 
         Returns:
-            Dict with conversation_id, message_id, and receipt_id
+            Dict with conversation_id and message_id
         """
         if not self.settings.enable_conversation_tracking:
             raise ValueError("Conversation tracking is disabled")
@@ -415,88 +410,19 @@ class ConversationService:
                 if stored_message:
                     stored_messages.append(stored_message)
 
-            # Generate receipt for this LLM API call
-            receipts_service = ReceiptsService(self.db, self.settings)
-
-            # Calculate cost from registry if not provided
+            # Get tokens and cost from metadata
             input_tokens = metadata.get("input_tokens", 0)
             output_tokens = metadata.get("output_tokens", 0)
-
-            # Check if cost is provided in metadata (either as "cost" or separate input/output costs)
-            if metadata.get("input_cost") is not None and metadata.get("output_cost") is not None:
-                # Use provided input/output costs (most accurate)
-                input_cost = metadata.get("input_cost")
-                output_cost = metadata.get("output_cost")
-                total_cost = input_cost + output_cost
-            elif metadata.get("cost"):
-                # Total cost provided but no split - calculate proper split from registry pricing
-                total_cost = metadata.get("cost")
-                # Get the proper ratio from registry
-                try:
-                    reg_input_cost, reg_output_cost, reg_total = (
-                        await receipts_service.calculate_cost_from_registry(
-                            provider=metadata.get("provider", "unknown"),
-                            model=response.get("model", metadata.get("model", "unknown")),
-                            input_tokens=input_tokens,
-                            output_tokens=output_tokens,
-                        )
-                    )
-                    # Use registry ratio to split the provided cost accurately
-                    if reg_total > 0:
-                        input_ratio = reg_input_cost / reg_total
-                        output_ratio = reg_output_cost / reg_total
-                        input_cost = total_cost * input_ratio
-                        output_cost = total_cost * output_ratio
-                    else:
-                        # Fallback: can't determine ratio, store total as output cost
-                        input_cost = 0.0
-                        output_cost = total_cost
-                except ValueError as e:
-                    # Model not in registry - fallback to storing total as output cost
-                    logger.warning(f"Registry cost calculation failed: {e}. Using fallback.")
-                    input_cost = 0.0
-                    output_cost = total_cost
-            else:
-                # Calculate from registry
-                try:
-                    input_cost, output_cost, total_cost = (
-                        await receipts_service.calculate_cost_from_registry(
-                            provider=metadata.get("provider", "unknown"),
-                            model=response.get("model", metadata.get("model", "unknown")),
-                            input_tokens=input_tokens,
-                            output_tokens=output_tokens,
-                        )
-                    )
-                except ValueError as e:
-                    # Model not in registry - use zero cost but log warning
-                    logger.warning(
-                        f"Cost calculation failed for unknown model: {e}. Using zero cost."
-                    )
-                    input_cost = 0.0
-                    output_cost = 0.0
-                    total_cost = 0.0
-
-            receipt, receipt_uuid = await receipts_service.generate_and_sign_receipt(
-                api_key_id=api_key_id,
-                alias=metadata.get("alias") or "default",
-                profile=metadata.get("profile") or "default",
-                lock_digest=metadata.get("lock_digest") or "",
-                provider=metadata.get("provider") or "unknown",
-                model=response.get("model") or metadata.get("model") or "unknown",
-                prompt_tokens=input_tokens,
-                completion_tokens=output_tokens,
-                input_cost=input_cost,
-                output_cost=output_cost,
-                conversation_id=conversation_id,
+            total_cost = metadata.get("cost") or (
+                (metadata.get("input_cost") or 0.0) + (metadata.get("output_cost") or 0.0)
             )
 
-            # Store the assistant's response with receipt link (UUID not VARCHAR)
+            # Store the assistant's response
             # Note: response.model is the actual model returned by the LLM (e.g., "gpt-4-0613")
             # metadata.model is what the user requested (e.g., "gpt-4")
             # We prefer the actual model from the response
             assistant_message = MessageCreate(
                 conversation_id=conversation_id,
-                receipt_id=receipt_uuid,  # Link to the receipt's UUID in the database
                 role="assistant",
                 content=response.get("content"),
                 tool_calls=response.get("tool_calls"),
@@ -518,15 +444,18 @@ class ConversationService:
                 logging_level=self.settings.message_logging_level,
             )
 
-            # Note: Conversation statistics (including cost) are automatically updated by the
-            # database trigger (update_conversation_stats) when the message with receipt is inserted.
-            # No manual cost update needed!
+            # Note: Conversation statistics (tokens, message count) are automatically updated by the
+            # database trigger (update_conversation_stats) when messages are inserted.
+            # However, cost must be updated manually now that receipts are removed.
+            await self.db.execute(
+                "UPDATE {{tables.conversations}} SET total_cost = total_cost + $1 WHERE id = $2",
+                total_cost,
+                conversation_id,
+            )
 
             return {
                 "conversation_id": str(conversation_id),
                 "message_id": str(response_message.id) if response_message else None,
-                "receipt_id": receipt.receipt_id,
-                "receipt": receipt,  # Return the full receipt object
                 "messages_stored": len(stored_messages) + 1,
             }
         except Exception:

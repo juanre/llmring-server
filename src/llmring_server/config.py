@@ -1,9 +1,6 @@
-import base64
 from enum import Enum
-from pathlib import Path
 from typing import Optional
 
-from nacl import signing
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -71,17 +68,6 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LLMRING_REGISTRY_BASE_URL"),
     )
 
-    # Receipts signing/verification keys (base64-encoded Ed25519)
-    receipts_private_key_base64: str | None = Field(
-        default=None, validation_alias=AliasChoices("LLMRING_RECEIPTS_PRIVATE_KEY_B64")
-    )
-    receipts_public_key_base64: str | None = Field(
-        default=None, validation_alias=AliasChoices("LLMRING_RECEIPTS_PUBLIC_KEY_B64")
-    )
-    receipts_key_id: str | None = Field(
-        default=None, validation_alias=AliasChoices("LLMRING_RECEIPTS_KEY_ID")
-    )
-
     # Message logging configuration
     message_logging_level: MessageLoggingLevel = Field(
         default=MessageLoggingLevel.FULL,
@@ -109,99 +95,3 @@ class Settings(BaseSettings):
         return value
 
     # Pydantic v2: use model_config above; no inner Config class
-
-
-def load_or_generate_keypair(
-    key_file: Optional[Path] = None,
-) -> tuple[str, str]:
-    """
-    Load or generate Ed25519 keypair for receipt signing.
-
-    This function either:
-    1. Loads an existing keypair from a file (if key_file provided and exists)
-    2. Generates a new keypair and optionally saves it
-
-    Args:
-        key_file: Optional path to save/load keypair. If None, generates ephemeral keys.
-
-    Returns:
-        Tuple of (private_key_base64url, public_key_base64url)
-
-    Example:
-        >>> private_b64, public_b64 = load_or_generate_keypair(Path(".keys/receipt_signing_key"))
-        >>> settings.receipts_private_key_base64 = private_b64
-        >>> settings.receipts_public_key_base64 = public_b64
-    """
-
-    def _b64url_encode(data: bytes) -> str:
-        """Encode bytes as base64url (no padding)."""
-        return base64.urlsafe_b64encode(data).decode().rstrip("=")
-
-    def _b64url_decode(data: str) -> bytes:
-        """Decode base64url string (add padding if needed)."""
-        padding = "=" * ((4 - len(data) % 4) % 4)
-        return base64.urlsafe_b64decode(data + padding)
-
-    # Try to load existing key
-    if key_file and key_file.exists():
-        try:
-            content = key_file.read_text().strip()
-            lines = content.split("\n")
-            if len(lines) >= 2:
-                private_b64 = lines[0].strip()
-                public_b64 = lines[1].strip()
-
-                # Validate the keys
-                signing.SigningKey(_b64url_decode(private_b64))
-                signing.VerifyKey(_b64url_decode(public_b64))
-
-                return private_b64, public_b64
-        except Exception as e:
-            raise RuntimeError(f"Failed to load keypair from {key_file}: {e}")
-
-    # Generate new keypair
-    signing_key = signing.SigningKey.generate()
-    verify_key = signing_key.verify_key
-
-    private_b64 = _b64url_encode(bytes(signing_key))
-    public_b64 = _b64url_encode(bytes(verify_key))
-
-    # Save if key_file specified
-    if key_file:
-        key_file.parent.mkdir(parents=True, exist_ok=True)
-        key_file.write_text(f"{private_b64}\n{public_b64}\n")
-        key_file.chmod(0o600)  # Secure permissions
-
-    return private_b64, public_b64
-
-
-def ensure_receipt_keys(settings: Settings, key_file: Optional[Path] = None) -> Settings:
-    """
-    Ensure receipt signing keys are configured.
-
-    If keys are not configured in settings, generates or loads them.
-
-    Args:
-        settings: Settings instance to update
-        key_file: Optional path to key file
-
-    Returns:
-        Updated settings instance
-
-    Example:
-        >>> settings = Settings()
-        >>> settings = ensure_receipt_keys(settings, Path(".keys/receipt_key"))
-    """
-    if not settings.receipts_private_key_base64 or not settings.receipts_public_key_base64:
-        private_b64, public_b64 = load_or_generate_keypair(key_file)
-        settings.receipts_private_key_base64 = private_b64
-        settings.receipts_public_key_base64 = public_b64
-
-        if not settings.receipts_key_id:
-            # Generate a simple key ID from public key hash
-            import hashlib
-
-            key_hash = hashlib.sha256(public_b64.encode()).hexdigest()[:16]
-            settings.receipts_key_id = f"key_{key_hash}"
-
-    return settings

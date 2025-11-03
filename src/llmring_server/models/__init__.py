@@ -34,7 +34,6 @@ from llmring_server.models.mcp import (
     MCPToolUpdate,
     MCPToolWithServer,
 )
-from llmring_server.models.receipts import Receipt, ReceiptRequest, ReceiptResponse
 from llmring_server.models.registry import LLMModel, ProviderInfo, RegistryResponse
 from llmring_server.models.usage import (
     DailyUsage,
@@ -78,10 +77,6 @@ __all__ = [
     "MCPToolExecutionRequest",
     "MCPToolExecutionResponse",
     "MCPCapabilities",
-    # Receipts
-    "Receipt",
-    "ReceiptRequest",
-    "ReceiptResponse",
     # Registry
     "LLMModel",
     "ProviderInfo",

@@ -1,5 +1,7 @@
 # Phase 7.5: On-Demand Receipt Generation - Implementation Summary
 
+> **⚠️ DEPRECATED**: This document describes the cryptographic receipts feature which was removed in November 2025. The receipts system provided minimal security value as signatures from the service provider don't prevent tampering by the service operator. This document is kept for historical reference only. Usage tracking and cost calculation remain fully functional without receipts.
+
 **Date**: 2025-10-02
 **Status**: Core Implementation Complete ✅
 **Complies with**: source-of-truth v4.1, LOGGING_REFACTOR_PLAN.md Phase 7.5

@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from pgdbm import AsyncDatabaseManager, DatabaseConfig
 from pgdbm.migrations import AsyncMigrationManager
 
-from .config import Settings, ensure_receipt_keys
+from .config import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +40,6 @@ def create_app(
     # Load settings if not provided
     if settings is None:
         settings = Settings()
-    # Ensure receipt signing keys are available (generate ephemeral in dev if missing)
-    settings = ensure_receipt_keys(settings)
 
     # Use provided schema or default from settings
     schema = schema or settings.database_schema
@@ -150,12 +148,11 @@ def create_app(
 
     # Import routers
     from .routers import registry  # noqa: E402
-    from .routers import conversations, mcp, receipts, templates, usage
+    from .routers import conversations, mcp, templates, usage
 
     # Include routers
     app.include_router(registry.router)
     app.include_router(usage.router)
-    app.include_router(receipts.router)
     app.include_router(conversations.router)
     app.include_router(mcp.router)
     app.include_router(templates.router)
@@ -185,50 +182,6 @@ def create_app(
             ) as e:
                 logger.error(f"Health check failed: {e}")
                 return {"status": "unhealthy", "database": "disconnected"}
-
-    @app.get("/receipts/public-key.pem", response_class=PlainTextResponse)
-    async def receipts_public_key_pem():
-        if not settings.receipts_public_key_base64:
-            raise HTTPException(404, "Public key not configured")
-        # Render as PEM SubjectPublicKeyInfo
-        import base64
-
-        from cryptography.hazmat.primitives import serialization
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-
-        public_bytes = base64.b64decode(settings.receipts_public_key_base64)
-        public_key = Ed25519PublicKey.from_public_bytes(public_bytes)
-        pem = public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        )
-        return pem.decode("utf-8")
-
-    @app.get("/receipts/public-key.jwk", response_class=JSONResponse)
-    async def receipts_public_key_jwk():
-        if not settings.receipts_public_key_base64:
-            raise HTTPException(404, "Public key not configured")
-        # Render as JWK (OKP/Ed25519)
-        return {
-            "kty": "OKP",
-            "crv": "Ed25519",
-            "x": settings.receipts_public_key_base64.replace("=", ""),
-        }
-
-    @app.get("/receipts/public-keys.json", response_class=JSONResponse)
-    async def receipts_public_keys_json():
-        """Return a simple key set (array) for future multi-key rotation support."""
-        if not settings.receipts_public_key_base64:
-            raise HTTPException(404, "Public key not configured")
-        key_id = getattr(settings, "receipts_key_id", None) or "default"
-        return [
-            {
-                "kid": key_id,
-                "kty": "OKP",
-                "crv": "Ed25519",
-                "x": settings.receipts_public_key_base64.replace("=", ""),
-            }
-        ]
 
     return app
 

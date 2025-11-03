@@ -65,7 +65,6 @@ class MessageCreate(MessageBase):
     """Model for creating a message."""
 
     conversation_id: Optional[UUID] = None  # Set by server/batch
-    receipt_id: Optional[UUID] = None
     input_tokens: Optional[int] = None
     output_tokens: Optional[int] = None
 
@@ -75,7 +74,6 @@ class Message(MessageBase):
 
     id: UUID
     conversation_id: UUID
-    receipt_id: Optional[UUID] = None
     content_hash: Optional[str] = None
     input_tokens: Optional[int] = None
     output_tokens: Optional[int] = None
@@ -95,7 +93,6 @@ class MessageBatch(BaseModel):
 
     conversation_id: UUID
     messages: List[MessageCreate]
-    create_receipt: bool = True
     logging_level: str = "full"  # none, metadata, full
 
 
@@ -128,7 +125,3 @@ class ConversationLogResponse(BaseModel):
 
     conversation_id: str
     message_id: str
-    receipt: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Automatically generated cryptographically signed receipt for this API call",
-    )

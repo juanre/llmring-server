@@ -462,7 +462,6 @@ async def test_log_conversation_full(test_app):
     # Verify response structure
     assert "conversation_id" in data
     assert "message_id" in data
-    assert "receipt" in data  # Will be None in response, but receipt is generated
 
     conversation_id = data["conversation_id"]
 
@@ -480,8 +479,8 @@ async def test_log_conversation_full(test_app):
     assert conv_data["message_count"] == 2  # User message + assistant response
     assert conv_data["total_input_tokens"] == 10
     assert conv_data["total_output_tokens"] == 8
-    # Cost should be automatically calculated from receipt
-    assert conv_data["total_cost"] > 0  # Should have cost from receipt
+    # Cost should be automatically calculated
+    assert conv_data["total_cost"] > 0  # Should have cost
 
     # Check messages were stored
     assert len(conv_data["messages"]) == 2
@@ -494,12 +493,6 @@ async def test_log_conversation_full(test_app):
     assert assistant_msg["content"] == "The capital of France is Paris."
     assert assistant_msg["input_tokens"] == 10
     assert assistant_msg["output_tokens"] == 8
-
-    # AUTOMATIC RECEIPT VERIFICATION
-    # Verify that a receipt was automatically generated and linked to the assistant message
-    assert (
-        assistant_msg.get("receipt_id") is not None
-    ), "Receipt should be automatically linked to assistant message"
 
 
 @pytest.mark.asyncio
