@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from pgdbm import AsyncDatabaseManager, DatabaseConfig
 from pgdbm.migrations import AsyncMigrationManager
 
-from .config import Settings
+from .config import Settings, ensure_receipt_keys
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,8 @@ def create_app(
     # Load settings if not provided
     if settings is None:
         settings = Settings()
+    # Ensure receipt signing keys are available (generate ephemeral in dev if missing)
+    settings = ensure_receipt_keys(settings)
 
     # Use provided schema or default from settings
     schema = schema or settings.database_schema

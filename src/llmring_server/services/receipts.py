@@ -509,7 +509,7 @@ class ReceiptsService:
         """
         usage_logs = await self.db.fetch_all(usage_query, api_key_id, start_date, end_date)
 
-        # Combine and normalize
+        # Combine conversation and raw usage rows into a unified response shape
         all_logs = []
         for conv in conversations:
             all_logs.append(

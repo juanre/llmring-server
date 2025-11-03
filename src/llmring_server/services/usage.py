@@ -120,19 +120,44 @@ class UsageService:
         end_date: Optional[str] = None,
         group_by: str = "day",
     ) -> UsageStats:
-        def _to_naive(dt: datetime) -> datetime:
-            if dt.tzinfo is not None:
-                return dt.astimezone(timezone.utc).replace(tzinfo=None)
+        def _parse_date(value: Optional[str], *, is_end_of_range: bool) -> Optional[datetime]:
+            if not value:
+                return None
+
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            date_only = "T" not in value and " " not in value
+
+            if date_only:
+                if is_end_of_range:
+                    dt = dt.replace(hour=23, minute=59, second=59, microsecond=999_999)
+                else:
+                    dt = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = dt.astimezone(timezone.utc)
+
             return dt
 
-        if not end_date:
-            end_dt = _to_naive(datetime.now(timezone.utc))
-        else:
-            end_dt = _to_naive(datetime.fromisoformat(end_date.replace("Z", "+00:00")))
-        if not start_date:
-            start_dt = _to_naive(datetime.now(timezone.utc) - timedelta(days=30))
-        else:
-            start_dt = _to_naive(datetime.fromisoformat(start_date.replace("Z", "+00:00")))
+        end_dt = (
+            _parse_date(end_date, is_end_of_range=True) if end_date else datetime.now(timezone.utc)
+        )
+        start_dt = (
+            _parse_date(start_date, is_end_of_range=False)
+            if start_date
+            else datetime.now(timezone.utc) - timedelta(days=30)
+        )
+
+        # Ensure defaults are normalized to UTC if they were not parsed from input
+        if end_dt.tzinfo is None:
+            end_dt = end_dt.replace(tzinfo=timezone.utc)
+        if start_dt.tzinfo is None:
+            start_dt = start_dt.replace(tzinfo=timezone.utc)
+
+        # Clamp start to not exceed end
+        if start_dt > end_dt:
+            start_dt = end_dt
 
         summary_query = """
             SELECT
@@ -143,8 +168,8 @@ class UsageService:
                 COUNT(DISTINCT origin) as unique_origins
             FROM {{tables.usage_logs}}
             WHERE api_key_id = $1
-                AND created_at >= $2::timestamp
-                AND created_at <= $3::timestamp
+                AND created_at >= $2::timestamptz
+                AND created_at <= $3::timestamptz
         """
         summary_result = await self.db.fetch_one(summary_query, api_key_id, start_dt, end_dt)
         # Guard against None result rows for mypy
@@ -189,8 +214,8 @@ class UsageService:
                 model as top_model
             FROM {{tables.usage_logs}}
             WHERE api_key_id = $1
-                AND created_at >= $2::timestamp
-                AND created_at <= $3::timestamp
+                AND created_at >= $2::timestamptz
+                AND created_at <= $3::timestamptz
             GROUP BY DATE(created_at), model
             ORDER BY DATE(created_at) DESC, COUNT(*) DESC
         """
@@ -221,8 +246,8 @@ class UsageService:
                 COALESCE(SUM(output_tokens), 0) as output_tokens
             FROM {{tables.usage_logs}}
             WHERE api_key_id = $1
-                AND created_at >= $2::timestamp
-                AND created_at <= $3::timestamp
+                AND created_at >= $2::timestamptz
+                AND created_at <= $3::timestamptz
             GROUP BY model
         """
         model_results = await self.db.fetch_all(model_query, api_key_id, start_dt, end_dt)
@@ -242,8 +267,8 @@ class UsageService:
                 COALESCE(SUM(cost), 0) as cost
             FROM {{tables.usage_logs}}
             WHERE api_key_id = $1
-                AND created_at >= $2::timestamp
-                AND created_at <= $3::timestamp
+                AND created_at >= $2::timestamptz
+                AND created_at <= $3::timestamptz
                 AND origin IS NOT NULL
             GROUP BY origin
         """
@@ -264,8 +289,8 @@ class UsageService:
                 COALESCE(SUM(output_tokens), 0) as output_tokens
             FROM {{tables.usage_logs}}
             WHERE api_key_id = $1
-                AND created_at >= $2::timestamp
-                AND created_at <= $3::timestamp
+                AND created_at >= $2::timestamptz
+                AND created_at <= $3::timestamptz
                 AND alias IS NOT NULL
             GROUP BY alias
         """

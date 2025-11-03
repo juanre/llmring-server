@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pgdbm import AsyncDatabaseManager
 
 from llmring_server.config import Settings
-from llmring_server.dependencies import get_db, get_project_id
+from llmring_server.dependencies import get_db, get_project_id, get_settings
 from llmring_server.models.conversations import (
     Conversation,
     ConversationCreate,
@@ -28,9 +28,9 @@ async def create_conversation(
     conversation_data: ConversationCreate,
     project_key: str = Depends(get_project_id),
     db: AsyncDatabaseManager = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> Conversation:
     """Create a new conversation."""
-    settings = Settings()
     if not settings.enable_conversation_tracking:
         raise HTTPException(400, "Conversation tracking is disabled")
 
@@ -53,9 +53,9 @@ async def get_conversation(
     message_limit: int = Query(100, ge=1, le=1000, description="Maximum messages to return"),
     project_key: str = Depends(get_project_id),
     db: AsyncDatabaseManager = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> ConversationWithMessages:
     """Get a conversation with optional messages."""
-    settings = Settings()
     service = ConversationService(db, settings)
 
     if include_messages:
@@ -81,9 +81,9 @@ async def update_conversation(
     update_data: ConversationUpdate,
     project_key: str = Depends(get_project_id),
     db: AsyncDatabaseManager = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> Conversation:
     """Update a conversation."""
-    settings = Settings()
     service = ConversationService(db, settings)
 
     result = await service.update_conversation(conversation_id, update_data, api_key_id=project_key)
@@ -100,9 +100,9 @@ async def list_conversations(
     offset: int = Query(0, ge=0),
     project_key: str = Depends(get_project_id),
     db: AsyncDatabaseManager = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> List[Conversation]:
     """List conversations for the authenticated API key."""
-    settings = Settings()
     if not settings.enable_conversation_tracking:
         return []
 
@@ -117,9 +117,9 @@ async def get_conversation_messages(
     offset: int = Query(0, ge=0),
     project_key: str = Depends(get_project_id),
     db: AsyncDatabaseManager = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> List[Message]:
     """Get messages for a conversation."""
-    settings = Settings()
     service = ConversationService(db, settings)
 
     # Verify conversation belongs to API key
@@ -136,9 +136,9 @@ async def add_messages_batch(
     batch: MessageBatch,
     project_key: str = Depends(get_project_id),
     db: AsyncDatabaseManager = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> List[Message]:
     """Add multiple messages to a conversation."""
-    settings = Settings()
     if settings.message_logging_level == "none":
         raise HTTPException(400, "Message logging is disabled")
 
@@ -160,10 +160,10 @@ async def cleanup_old_messages(
     retention_days: Optional[int] = Query(None, description="Override default retention days"),
     project_key: str = Depends(get_project_id),
     db: AsyncDatabaseManager = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> dict:
     """Clean up old messages based on retention policy (admin only)."""
     # Admin check should be added when role-based access control is implemented
-    settings = Settings()
     service = ConversationService(db, settings)
 
     deleted_count = await service.cleanup_old_messages(retention_days)
@@ -179,6 +179,7 @@ async def log_conversation(
     log_request: ConversationLogRequest,
     project_key: str = Depends(get_project_id),
     db: AsyncDatabaseManager = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> ConversationLogResponse:
     """
     Log a full conversation with messages and response.
@@ -196,7 +197,6 @@ async def log_conversation(
     Receipts are generated automatically for every LLM API call and linked
     to the assistant message. This ensures complete cost tracking and audit trail.
     """
-    settings = Settings()
     if not settings.enable_conversation_tracking:
         raise HTTPException(400, "Conversation tracking is disabled")
 
