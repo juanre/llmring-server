@@ -444,14 +444,9 @@ class ConversationService:
                 logging_level=self.settings.message_logging_level,
             )
 
-            # Note: Conversation statistics (tokens, message count) are automatically updated by the
+            # Note: Conversation statistics (tokens, message count, cost) are automatically updated by the
             # database trigger (update_conversation_stats) when messages are inserted.
-            # However, cost must be updated manually now that receipts are removed.
-            await self.db.execute(
-                "UPDATE {{tables.conversations}} SET total_cost = total_cost + $1 WHERE id = $2",
-                total_cost,
-                conversation_id,
-            )
+            # Cost is extracted from the message metadata JSON field by the trigger.
 
             return {
                 "conversation_id": str(conversation_id),

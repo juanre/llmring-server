@@ -22,8 +22,8 @@ BEGIN
         message_count = message_count + 1,
         total_input_tokens = total_input_tokens + COALESCE(NEW.input_tokens, 0),
         total_output_tokens = total_output_tokens + COALESCE(NEW.output_tokens, 0),
-        -- Note: total_cost calculation removed as receipts are gone
-        -- Cost tracking now happens in usage_logs table only
+        -- Extract cost from message metadata JSON field
+        total_cost = total_cost + COALESCE((NEW.metadata->>'cost')::numeric, 0),
         last_message_at = NEW.timestamp,
         updated_at = CURRENT_TIMESTAMP
     WHERE id = NEW.conversation_id;
