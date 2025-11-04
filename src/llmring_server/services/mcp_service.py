@@ -1,8 +1,11 @@
+# ABOUTME: Business logic for MCP (Model Context Protocol) server and tool management.
+# ABOUTME: Handles MCP servers, tools, resources, prompts, and tracks tool execution history.
+
 """MCP (Model Context Protocol) service for llmring-server."""
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
@@ -298,7 +301,7 @@ class MCPService:
                     "resources": len(resources),
                     "prompts": len(prompts),
                 },
-                datetime.utcnow(),
+                datetime.now(timezone.utc),
                 server_id,
             )
 

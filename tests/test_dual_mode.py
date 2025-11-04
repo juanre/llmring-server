@@ -1,3 +1,6 @@
+# ABOUTME: Tests for llmring-server dual-mode operation (standalone vs library mode).
+# ABOUTME: Ensures server works correctly in both deployment configurations.
+
 """Test dual-mode operation of llmring-server."""
 
 import pytest

@@ -1,3 +1,6 @@
+# ABOUTME: FastAPI router for LLM usage logging and statistics.
+# ABOUTME: Handles usage log creation, retrieval with filtering, and aggregated statistics.
+
 from datetime import datetime
 from typing import Optional
 
@@ -5,7 +8,7 @@ from fastapi import APIRouter, Depends, Query
 from pgdbm import AsyncDatabaseManager
 
 from llmring_server.dependencies import get_db, get_project_id
-from llmring_server.models.usage import UsageLogRequest, UsageLogResponse, UsageStats
+from llmring_server.models.usage import UsageLogEntry, UsageLogRequest, UsageLogResponse, UsageStats
 from llmring_server.services.usage import UsageService
 
 router = APIRouter(
@@ -79,3 +82,29 @@ async def get_stats(
         end_date=end_date,
         group_by=group_by,
     )
+
+
+@router.get("/logs", response_model=list[UsageLogEntry])
+async def list_usage_logs(
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    start_date: Optional[str] = Query(None, description="Start date (ISO 8601)"),
+    end_date: Optional[str] = Query(None, description="End date (ISO 8601)"),
+    alias: Optional[str] = Query(None, description="Filter by alias"),
+    model: Optional[str] = Query(None, description="Filter by model"),
+    origin: Optional[str] = Query(None, description="Filter by origin"),
+    project_id: str = Depends(get_project_id),
+    db: AsyncDatabaseManager = Depends(get_db),
+):
+    service = UsageService(db)
+    logs = await service.get_logs(
+        api_key_id=project_id,
+        limit=limit,
+        offset=offset,
+        start_date=start_date,
+        end_date=end_date,
+        alias=alias,
+        model=model,
+        origin=origin,
+    )
+    return logs

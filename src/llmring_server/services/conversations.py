@@ -1,3 +1,6 @@
+# ABOUTME: Business logic for conversation and message management with configurable logging.
+# ABOUTME: Handles conversation CRUD, message batching, hash-based deduplication, and retention cleanup.
+
 """Service for conversation and message management."""
 
 import hashlib

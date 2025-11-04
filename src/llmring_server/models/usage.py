@@ -1,3 +1,6 @@
+# ABOUTME: Pydantic models for LLM usage logging and statistics.
+# ABOUTME: Defines usage log requests, responses, daily summaries, and model-specific usage stats.
+
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
@@ -54,3 +57,20 @@ class UsageStats(BaseModel):
     by_model: Dict[str, ModelUsage]
     by_origin: Dict[str, Dict[str, Any]]
     by_alias: Dict[str, ModelUsage]
+
+
+class UsageLogEntry(BaseModel):
+    id: str
+    logged_at: datetime
+    provider: str
+    model: str
+    alias: Optional[str]
+    profile: Optional[str]
+    origin: Optional[str]
+    input_tokens: int
+    output_tokens: int
+    cached_input_tokens: int
+    cost: float
+    metadata: Optional[Dict[str, Any]] = None
+    conversation_id: Optional[str] = None
+    id_at_origin: Optional[str] = None

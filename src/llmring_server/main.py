@@ -1,3 +1,6 @@
+# ABOUTME: FastAPI application factory with dual-mode support (standalone/library).
+# ABOUTME: Creates app instance with database, migrations, CORS, and route configuration.
+
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path

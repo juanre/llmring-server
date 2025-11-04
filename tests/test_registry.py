@@ -1,3 +1,6 @@
+# ABOUTME: Tests for root and health check endpoints.
+# ABOUTME: Basic smoke tests to ensure server is responding correctly.
+
 import pytest
 
 

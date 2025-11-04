@@ -1,3 +1,6 @@
+# ABOUTME: FastAPI dependencies for API key validation and database access.
+# ABOUTME: Provides get_project_id for authentication and get_db for database injection.
+
 from fastapi import HTTPException, Request
 from pgdbm import AsyncDatabaseManager
 

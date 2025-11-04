@@ -1,3 +1,6 @@
+# ABOUTME: Tests for MCP (Model Context Protocol) server and tool management.
+# ABOUTME: Covers MCP servers, tools, resources, prompts, and tool execution tracking.
+
 """Tests for MCP (Model Context Protocol) integration."""
 
 from uuid import uuid4

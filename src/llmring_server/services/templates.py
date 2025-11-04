@@ -1,3 +1,6 @@
+# ABOUTME: Business logic for conversation template management and usage tracking.
+# ABOUTME: Handles template CRUD operations and tracks template usage statistics.
+
 """Service layer for conversation templates."""
 
 import logging

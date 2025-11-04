@@ -29,6 +29,46 @@ uv run python -m llmring_server.cli --reload
 
 By default the server listens on http://0.0.0.0:8000 and exposes Swagger UI at `/docs`.
 
+### Docker Compose (local stack)
+
+```bash
+docker compose -f docker-compose.dev.yml up --build
+```
+
+Services:
+- `db`: PostgreSQL 15 with persistent volume
+- `redis`: Redis 7 for caching/rate limiting (optional but bundled)
+- `server`: llmring-server with `uvicorn --reload`
+
+### Bare-metal development helper
+
+```bash
+# Ensure you have a local Postgres running (defaults: postgres/postgres)
+./scripts/dev-server.sh
+```
+
+The script:
+1. Creates the development database if needed (`uv run llmring-server db create --env dev`)
+2. Runs migrations (`uv run llmring-server db migrate --env dev`)
+3. Starts the FastAPI server with auto-reload
+
+### Bootstrap client configuration
+
+After the server is running, generate a local env file from your application repo:
+
+```bash
+llmring server init --env-file .env.llmring
+source .env.llmring
+```
+
+CLI helpers:
+- `llmring server status` — verify health checks and API key acceptance
+- `llmring server key rotate` — create a fresh API key and update `.env.llmring`
+- `llmring server key list` — inspect current values from env and env file
+- `llmring server stats` — aggregated usage for the active API key
+- `llmring server logs --output csv` — export raw usage events
+- `llmring server conversations` — inspect stored conversation history
+
 ## Configuration
 
 Configuration is provided via environment variables (Pydantic Settings). Key variables:

@@ -1,3 +1,6 @@
+# ABOUTME: Business logic for LLM usage logging and statistics aggregation.
+# ABOUTME: Logs usage data with Redis caching and provides daily/model-level analytics.
+
 import json
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -17,6 +20,28 @@ from llmring_server.models.usage import (
 )
 
 settings = Settings()
+
+
+def _parse_iso_datetime(value: Optional[str], *, is_end_of_range: bool) -> Optional[datetime]:
+    """Parse ISO-8601 date/time strings, normalising to UTC."""
+    if not value:
+        return None
+
+    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    date_only = "T" not in value and " " not in value
+
+    if date_only:
+        if is_end_of_range:
+            dt = dt.replace(hour=23, minute=59, second=59, microsecond=999_999)
+        else:
+            dt = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+
+    return dt
 
 
 class UsageService:
@@ -120,31 +145,13 @@ class UsageService:
         end_date: Optional[str] = None,
         group_by: str = "day",
     ) -> UsageStats:
-        def _parse_date(value: Optional[str], *, is_end_of_range: bool) -> Optional[datetime]:
-            if not value:
-                return None
-
-            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-            date_only = "T" not in value and " " not in value
-
-            if date_only:
-                if is_end_of_range:
-                    dt = dt.replace(hour=23, minute=59, second=59, microsecond=999_999)
-                else:
-                    dt = dt.replace(hour=0, minute=0, second=0, microsecond=0)
-
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            else:
-                dt = dt.astimezone(timezone.utc)
-
-            return dt
-
         end_dt = (
-            _parse_date(end_date, is_end_of_range=True) if end_date else datetime.now(timezone.utc)
+            _parse_iso_datetime(end_date, is_end_of_range=True)
+            if end_date
+            else datetime.now(timezone.utc)
         )
         start_dt = (
-            _parse_date(start_date, is_end_of_range=False)
+            _parse_iso_datetime(start_date, is_end_of_range=False)
             if start_date
             else datetime.now(timezone.utc) - timedelta(days=30)
         )
@@ -311,3 +318,99 @@ class UsageService:
             by_origin=by_origin,
             by_alias=by_alias,
         )
+
+    async def get_logs(
+        self,
+        api_key_id: str,
+        limit: int = 50,
+        offset: int = 0,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        alias: Optional[str] = None,
+        model: Optional[str] = None,
+        origin: Optional[str] = None,
+    ) -> List[Dict[str, object]]:
+        limit = max(1, min(limit, 500))
+        offset = max(0, offset)
+
+        end_dt = (
+            _parse_iso_datetime(end_date, is_end_of_range=True)
+            if end_date
+            else datetime.now(timezone.utc)
+        )
+        start_dt = (
+            _parse_iso_datetime(start_date, is_end_of_range=False)
+            if start_date
+            else end_dt - timedelta(days=30)
+        )
+
+        conditions = ["api_key_id = $1"]
+        params: List[object] = [api_key_id]
+        idx = 2
+
+        if start_dt:
+            conditions.append(f"created_at >= ${idx}::timestamptz")
+            params.append(start_dt)
+            idx += 1
+        if end_dt:
+            conditions.append(f"created_at <= ${idx}::timestamptz")
+            params.append(end_dt)
+            idx += 1
+        if alias:
+            conditions.append(f"alias = ${idx}")
+            params.append(alias)
+            idx += 1
+        if model:
+            conditions.append(f"model = ${idx}")
+            params.append(model)
+            idx += 1
+        if origin:
+            conditions.append(f"origin = ${idx}")
+            params.append(origin)
+            idx += 1
+
+        where_clause = " AND ".join(conditions)
+        query = (
+            "SELECT "
+            "id, created_at, provider, model, alias, profile, origin, "
+            "input_tokens, output_tokens, cached_input_tokens, cost, metadata, "
+            "conversation_id, id_at_origin "
+            "FROM {{tables.usage_logs}} "
+            "WHERE " + where_clause + f" ORDER BY created_at DESC LIMIT ${idx} OFFSET ${idx + 1}"
+        )
+        params.extend([limit, offset])
+
+        rows = await self.db.fetch_all(query, *params)
+        results: List[Dict[str, object]] = []
+        for row in rows or []:
+            metadata = row.get("metadata")
+            if isinstance(metadata, str):
+                try:
+                    metadata = json.loads(metadata)
+                except json.JSONDecodeError:
+                    metadata = None
+
+            conversation_id = row.get("conversation_id")
+            if conversation_id:
+                conversation_id = str(conversation_id)
+
+            results.append(
+                {
+                    "id": str(row["id"]),
+                    "logged_at": row["created_at"],
+                    "provider": row.get("provider"),
+                    "model": row.get("model"),
+                    "alias": row.get("alias"),
+                    "profile": row.get("profile"),
+                    "origin": row.get("origin"),
+                    "input_tokens": row.get("input_tokens"),
+                    "output_tokens": row.get("output_tokens"),
+                    "cached_input_tokens": row.get("cached_input_tokens"),
+                    "cost": float(row.get("cost") or 0),
+                    "metadata": metadata,
+                    "conversation_id": conversation_id,
+                    "id_at_origin": row.get("id_at_origin"),
+                }
+            )
+
+        return results

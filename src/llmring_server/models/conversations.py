@@ -1,3 +1,6 @@
+# ABOUTME: Pydantic models for conversation and message tracking.
+# ABOUTME: Defines conversation creation, updates, and message batching with configurable logging levels.
+
 """Models for conversation and message tracking."""
 
 from datetime import datetime

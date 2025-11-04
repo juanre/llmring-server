@@ -1,3 +1,6 @@
+# ABOUTME: Pydantic models for llmring-server API validation and responses.
+# ABOUTME: Exports models for conversations, MCP, registry, and usage tracking.
+
 """Models for llmring-server."""
 
 from llmring_server.models.conversations import (

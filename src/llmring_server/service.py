@@ -1,3 +1,6 @@
+# ABOUTME: High-level service interface for using llmring-server as a library.
+# ABOUTME: Provides LLMRingService class that encapsulates all service functionality.
+
 """High-level service interface for llmring-server.
 
 This module provides a clean interface for using llmring-server as a library.

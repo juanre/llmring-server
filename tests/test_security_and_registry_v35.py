@@ -1,3 +1,6 @@
+# ABOUTME: Tests for API key authentication and registry v3.5 schema parsing.
+# ABOUTME: Ensures stateful routes require authentication and registry handles new schema.
+
 import pytest
 
 

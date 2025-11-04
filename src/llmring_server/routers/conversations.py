@@ -1,3 +1,6 @@
+# ABOUTME: FastAPI router for conversation and message management endpoints.
+# ABOUTME: Handles conversation CRUD, message batching, and configurable message logging levels.
+
 """API routes for conversation and message management."""
 
 from typing import List, Optional
