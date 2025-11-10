@@ -12,11 +12,12 @@ from llmring_server.dependencies import get_auth_context
 async def setup_api_keys_table(llmring_db):
     """Create llmring_api schema and api_keys table for testing cross-schema authorization."""
     await llmring_db.execute("CREATE SCHEMA IF NOT EXISTS llmring_api")
+    await llmring_db.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
     await llmring_db.execute(
         """
         CREATE TABLE IF NOT EXISTS llmring_api.api_keys (
-            id VARCHAR(255) PRIMARY KEY,
-            project_id VARCHAR(255) NOT NULL,
+            id UUID PRIMARY KEY,
+            project_id UUID NOT NULL,
             name VARCHAR(255) NOT NULL,
             key_hash VARCHAR(255) NOT NULL
         )
@@ -85,7 +86,7 @@ async def test_mcp_list_servers_with_user_auth(test_app, setup_api_keys_table):
     await llmring_db.execute(
         """
         INSERT INTO llmring_api.api_keys (id, project_id, name, key_hash)
-        VALUES ('api-key-1', 'project-1', 'Test Key 1', 'hash1')
+        VALUES ('00000000-0000-0000-0000-000000000001'::uuid, '10000000-0000-0000-0000-000000000001'::uuid, 'Test Key 1', 'hash1')
         """
     )
 
@@ -93,7 +94,7 @@ async def test_mcp_list_servers_with_user_auth(test_app, setup_api_keys_table):
     await llmring_db.execute(
         """
         INSERT INTO llmring_api.api_keys (id, project_id, name, key_hash)
-        VALUES ('api-key-2', 'project-2', 'Test Key 2', 'hash2')
+        VALUES ('00000000-0000-0000-0000-000000000002'::uuid, '10000000-0000-0000-0000-000000000002'::uuid, 'Test Key 2', 'hash2')
         """
     )
 
@@ -101,7 +102,7 @@ async def test_mcp_list_servers_with_user_auth(test_app, setup_api_keys_table):
     await llmring_db.execute(
         """
         INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id)
-        VALUES ('Server 1', 'http://server1', 'http', 'api-key-1')
+        VALUES ('Server 1', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001')
         """
     )
 
@@ -109,13 +110,14 @@ async def test_mcp_list_servers_with_user_auth(test_app, setup_api_keys_table):
     await llmring_db.execute(
         """
         INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id)
-        VALUES ('Server 2', 'http://server2', 'http', 'api-key-2')
+        VALUES ('Server 2', 'http://server2', 'http', '00000000-0000-0000-0000-000000000002')
         """
     )
 
     # User 1 lists servers - should only see project 1's servers
     response = await test_app.get(
-        "/api/v1/mcp/servers", headers={"X-User-ID": "user-1", "X-Project-ID": "project-1"}
+        "/api/v1/mcp/servers",
+        headers={"X-User-ID": "user-1", "X-Project-ID": "10000000-0000-0000-0000-000000000001"},
     )
 
     assert response.status_code == 200
@@ -125,7 +127,8 @@ async def test_mcp_list_servers_with_user_auth(test_app, setup_api_keys_table):
 
     # User 2 lists servers - should only see project 2's servers
     response = await test_app.get(
-        "/api/v1/mcp/servers", headers={"X-User-ID": "user-2", "X-Project-ID": "project-2"}
+        "/api/v1/mcp/servers",
+        headers={"X-User-ID": "user-2", "X-Project-ID": "10000000-0000-0000-0000-000000000002"},
     )
 
     assert response.status_code == 200
@@ -148,7 +151,7 @@ async def test_mcp_get_server_authorization_bypass(test_app, setup_api_keys_tabl
     await llmring_db.execute(
         """
         INSERT INTO llmring_api.api_keys (id, project_id, name, key_hash)
-        VALUES ('api-key-1', 'project-1', 'Test Key 1', 'hash1')
+        VALUES ('00000000-0000-0000-0000-000000000001'::uuid, '10000000-0000-0000-0000-000000000001'::uuid, 'Test Key 1', 'hash1')
         """
     )
 
@@ -156,7 +159,7 @@ async def test_mcp_get_server_authorization_bypass(test_app, setup_api_keys_tabl
     result = await llmring_db.fetch_one(
         """
         INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id)
-        VALUES ('Project 1 Server', 'http://server1', 'http', 'api-key-1')
+        VALUES ('Project 1 Server', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001')
         RETURNING id
         """
     )
@@ -165,7 +168,7 @@ async def test_mcp_get_server_authorization_bypass(test_app, setup_api_keys_tabl
     # User from project 2 tries to access project 1's server - should get 404
     response = await test_app.get(
         f"/api/v1/mcp/servers/{server_id}",
-        headers={"X-User-ID": "user-2", "X-Project-ID": "project-2"},
+        headers={"X-User-ID": "user-2", "X-Project-ID": "10000000-0000-0000-0000-000000000002"},
     )
 
     # SECURITY VIOLATION: This currently returns 200 instead of 404
@@ -187,7 +190,7 @@ async def test_mcp_update_server_authorization_bypass(test_app, setup_api_keys_t
     await llmring_db.execute(
         """
         INSERT INTO llmring_api.api_keys (id, project_id, name, key_hash)
-        VALUES ('api-key-1', 'project-1', 'Test Key 1', 'hash1')
+        VALUES ('00000000-0000-0000-0000-000000000001'::uuid, '10000000-0000-0000-0000-000000000001'::uuid, 'Test Key 1', 'hash1')
         """
     )
 
@@ -195,7 +198,7 @@ async def test_mcp_update_server_authorization_bypass(test_app, setup_api_keys_t
     result = await llmring_db.fetch_one(
         """
         INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id)
-        VALUES ('Original Name', 'http://server1', 'http', 'api-key-1')
+        VALUES ('Original Name', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001')
         RETURNING id
         """
     )
@@ -205,7 +208,7 @@ async def test_mcp_update_server_authorization_bypass(test_app, setup_api_keys_t
     response = await test_app.patch(
         f"/api/v1/mcp/servers/{server_id}",
         json={"name": "Hacked Name"},
-        headers={"X-User-ID": "user-2", "X-Project-ID": "project-2"},
+        headers={"X-User-ID": "user-2", "X-Project-ID": "10000000-0000-0000-0000-000000000002"},
     )
 
     # SECURITY VIOLATION: This currently returns 200 instead of 404
@@ -233,7 +236,7 @@ async def test_mcp_delete_server_authorization_bypass(test_app, setup_api_keys_t
     await llmring_db.execute(
         """
         INSERT INTO llmring_api.api_keys (id, project_id, name, key_hash)
-        VALUES ('api-key-1', 'project-1', 'Test Key 1', 'hash1')
+        VALUES ('00000000-0000-0000-0000-000000000001'::uuid, '10000000-0000-0000-0000-000000000001'::uuid, 'Test Key 1', 'hash1')
         """
     )
 
@@ -241,7 +244,7 @@ async def test_mcp_delete_server_authorization_bypass(test_app, setup_api_keys_t
     result = await llmring_db.fetch_one(
         """
         INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id)
-        VALUES ('Important Server', 'http://server1', 'http', 'api-key-1')
+        VALUES ('Important Server', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001')
         RETURNING id
         """
     )
@@ -250,7 +253,7 @@ async def test_mcp_delete_server_authorization_bypass(test_app, setup_api_keys_t
     # User from project 2 tries to delete project 1's server - should get 404
     response = await test_app.delete(
         f"/api/v1/mcp/servers/{server_id}",
-        headers={"X-User-ID": "user-2", "X-Project-ID": "project-2"},
+        headers={"X-User-ID": "user-2", "X-Project-ID": "10000000-0000-0000-0000-000000000002"},
     )
 
     # SECURITY VIOLATION: This currently returns 200 instead of 404
@@ -278,7 +281,7 @@ async def test_mcp_refresh_server_capabilities_authorization_bypass(test_app, se
     await llmring_db.execute(
         """
         INSERT INTO llmring_api.api_keys (id, project_id, name, key_hash)
-        VALUES ('api-key-1', 'project-1', 'Test Key 1', 'hash1')
+        VALUES ('00000000-0000-0000-0000-000000000001'::uuid, '10000000-0000-0000-0000-000000000001'::uuid, 'Test Key 1', 'hash1')
         """
     )
 
@@ -286,7 +289,7 @@ async def test_mcp_refresh_server_capabilities_authorization_bypass(test_app, se
     result = await llmring_db.fetch_one(
         """
         INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id)
-        VALUES ('Server 1', 'http://server1', 'http', 'api-key-1')
+        VALUES ('Server 1', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001')
         RETURNING id
         """
     )
@@ -296,7 +299,7 @@ async def test_mcp_refresh_server_capabilities_authorization_bypass(test_app, se
     response = await test_app.post(
         f"/api/v1/mcp/servers/{server_id}/refresh",
         json={"tools": [], "resources": [], "prompts": []},
-        headers={"X-User-ID": "user-2", "X-Project-ID": "project-2"},
+        headers={"X-User-ID": "user-2", "X-Project-ID": "10000000-0000-0000-0000-000000000002"},
     )
 
     # SECURITY VIOLATION: This currently returns 200 instead of 404
