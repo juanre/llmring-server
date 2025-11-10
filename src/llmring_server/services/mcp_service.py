@@ -155,7 +155,7 @@ class MCPService:
             query = """
                 SELECT s.*
                 FROM mcp_client.servers s
-                JOIN llmring_api.api_keys k ON k.id = s.api_key_id
+                JOIN llmring_api.api_keys k ON k.id = s.api_key_id::uuid
                 WHERE k.project_id = $1::uuid AND s.is_active = $2
                 ORDER BY s.created_at DESC
             """
