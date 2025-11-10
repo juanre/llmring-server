@@ -104,32 +104,47 @@ class MCPService:
     async def list_servers(
         self,
         api_key_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        project_id: Optional[str] = None,
         is_active: bool = True,
     ) -> List[Dict[str, Any]]:
         """List MCP servers.
 
+        Accepts either:
+        - api_key_id: for programmatic API key authentication
+        - user_id + project_id: for browser/JWT authentication
+
         Args:
-            api_key_id: Filter by project ID
+            api_key_id: Filter by API key ID
+            user_id: User ID for JWT authentication
+            project_id: Project ID for JWT authentication
             is_active: Filter by active status
 
         Returns:
             List of servers
         """
-        query = """
-            SELECT * FROM mcp_client.servers
-            WHERE is_active = $1
-        """
-        params = [is_active]
-
-        if api_key_id is not None:
-            query += " AND api_key_id = $2"
-            params.append(api_key_id)
+        if api_key_id:
+            # API key authentication - filter by api_key_id
+            query = """
+                SELECT * FROM mcp_client.servers
+                WHERE api_key_id = $1 AND is_active = $2
+                ORDER BY created_at DESC
+            """
+            results = await self.db.fetch_all(query, api_key_id, is_active)
+        elif user_id and project_id:
+            # User authentication - filter by project_id
+            # Cross-schema query: api_keys in llmring_api schema, mcp_servers in mcp_client schema
+            query = """
+                SELECT s.*
+                FROM mcp_client.servers s
+                JOIN llmring_api.api_keys k ON k.id = s.api_key_id
+                WHERE k.project_id = $1 AND s.is_active = $2
+                ORDER BY s.created_at DESC
+            """
+            results = await self.db.fetch_all(query, project_id, is_active)
         else:
-            query += " AND api_key_id IS NULL"
+            raise ValueError("Must provide either api_key_id or (user_id + project_id)")
 
-        query += " ORDER BY created_at DESC"
-
-        results = await self.db.fetch_all(query, *params)
         servers = []
         for r in results:
             server = dict(r)
@@ -350,42 +365,66 @@ class MCPService:
         self,
         server_id: Optional[UUID] = None,
         api_key_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        project_id: Optional[str] = None,
         is_active: bool = True,
     ) -> List[Dict[str, Any]]:
         """List MCP tools.
 
+        Accepts either:
+        - api_key_id: for programmatic API key authentication
+        - user_id + project_id: for browser/JWT authentication
+
         Args:
             server_id: Filter by server ID
-            api_key_id: Filter by project ID
+            api_key_id: Filter by API key ID
+            user_id: User ID for JWT authentication
+            project_id: Project ID for JWT authentication
             is_active: Filter by active status
 
         Returns:
             List of tools
         """
-        query = """
-            SELECT t.*, s.name as server_name, s.url as server_url
-            FROM mcp_client.tools t
-            JOIN mcp_client.servers s ON t.server_id = s.id
-            WHERE t.is_active = $1
-        """
-        params = [is_active]
-        param_count = 1
+        if api_key_id:
+            # API key authentication
+            query = """
+                SELECT t.*, s.name as server_name, s.url as server_url
+                FROM mcp_client.tools t
+                JOIN mcp_client.servers s ON t.server_id = s.id
+                WHERE t.is_active = $1 AND t.api_key_id = $2
+            """
+            params = [is_active, api_key_id]
+            param_count = 2
 
-        if server_id is not None:
-            param_count += 1
-            query += f" AND t.server_id = ${param_count}"
-            params.append(server_id)
+            if server_id is not None:
+                param_count += 1
+                query += f" AND t.server_id = ${param_count}"
+                params.append(server_id)
 
-        if api_key_id is not None:
-            param_count += 1
-            query += f" AND t.api_key_id = ${param_count}"
-            params.append(api_key_id)
+            query += " ORDER BY t.name"
+            results = await self.db.fetch_all(query, *params)
+        elif user_id and project_id:
+            # User authentication - filter by project_id via cross-schema join
+            query = """
+                SELECT t.*, s.name as server_name, s.url as server_url
+                FROM mcp_client.tools t
+                JOIN mcp_client.servers s ON t.server_id = s.id
+                JOIN llmring_api.api_keys k ON k.id = t.api_key_id
+                WHERE t.is_active = $1 AND k.project_id = $2
+            """
+            params = [is_active, project_id]
+            param_count = 2
+
+            if server_id is not None:
+                param_count += 1
+                query += f" AND t.server_id = ${param_count}"
+                params.append(server_id)
+
+            query += " ORDER BY t.name"
+            results = await self.db.fetch_all(query, *params)
         else:
-            query += " AND t.api_key_id IS NULL"
+            raise ValueError("Must provide either api_key_id or (user_id + project_id)")
 
-        query += " ORDER BY t.name"
-
-        results = await self.db.fetch_all(query, *params)
         tools = []
         for r in results:
             tool = dict(r)

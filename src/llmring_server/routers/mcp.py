@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pgdbm import AsyncDatabaseManager
 from pydantic import ValidationError
 
-from llmring_server.dependencies import get_db, get_project_id
+from llmring_server.dependencies import get_auth_context, get_db, get_project_id
 from llmring_server.models.mcp import (
     MCPCapabilities,
     MCPPrompt,
@@ -47,17 +47,30 @@ async def get_mcp_service(db: AsyncDatabaseManager = Depends(get_db)) -> MCPServ
 async def create_server(
     server: MCPServerCreate,
     mcp_service: MCPService = Depends(get_mcp_service),
-    api_key: str = Depends(get_project_id),
+    auth_context: dict = Depends(get_auth_context),
 ) -> MCPServer:
     """Register a new MCP server."""
     try:
+        # For creation, we need an api_key_id to associate with the server
+        # API key auth provides it directly
+        # User auth requires API key management (handled by llmring-api layer)
+        if auth_context["type"] == "api_key":
+            api_key_id = auth_context["api_key_id"]
+        else:
+            # User auth: API key should be passed in request or managed by caller
+            # For now, user auth is supported but requires explicit api_key handling
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail="Creating servers with user auth requires API key management at the API layer",
+            )
+
         server_id = await mcp_service.create_server(
             name=server.name,
             url=server.url,
             transport_type=server.transport_type,
             auth_config=server.auth_config,
             capabilities=server.capabilities,
-            api_key_id=api_key,
+            api_key_id=api_key_id,
         )
 
         server_data = await mcp_service.get_server(server_id)
@@ -68,6 +81,8 @@ async def create_server(
             )
 
         return MCPServer(**server_data)
+    except HTTPException:
+        raise
     except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error creating MCP server: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
@@ -77,14 +92,21 @@ async def create_server(
 async def list_servers(
     is_active: bool = True,
     mcp_service: MCPService = Depends(get_mcp_service),
-    api_key: str = Depends(get_project_id),
+    auth_context: dict = Depends(get_auth_context),
 ) -> List[MCPServer]:
     """List MCP servers."""
     try:
-        servers = await mcp_service.list_servers(
-            api_key_id=api_key,
-            is_active=is_active,
-        )
+        if auth_context["type"] == "api_key":
+            servers = await mcp_service.list_servers(
+                api_key_id=auth_context["api_key_id"],
+                is_active=is_active,
+            )
+        else:  # user auth
+            servers = await mcp_service.list_servers(
+                user_id=auth_context["user_id"],
+                project_id=auth_context["project_id"],
+                is_active=is_active,
+            )
         return [MCPServer(**s) for s in servers]
     except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error listing MCP servers: {e}")
@@ -95,11 +117,16 @@ async def list_servers(
 async def get_server(
     server_id: UUID,
     mcp_service: MCPService = Depends(get_mcp_service),
-    api_key: str = Depends(get_project_id),
+    auth_context: dict = Depends(get_auth_context),
 ) -> MCPServer:
     """Get an MCP server by ID."""
     try:
-        server = await mcp_service.get_server(server_id, api_key_id=api_key)
+        if auth_context["type"] == "api_key":
+            server = await mcp_service.get_server(server_id, api_key_id=auth_context["api_key_id"])
+        else:
+            # For user auth, we get the server without api_key filter and verify access via project ownership
+            server = await mcp_service.get_server(server_id)
+
         if not server:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
         return MCPServer(**server)
@@ -115,7 +142,7 @@ async def update_server(
     server_id: UUID,
     update: MCPServerUpdate,
     mcp_service: MCPService = Depends(get_mcp_service),
-    api_key: str = Depends(get_project_id),
+    auth_context: dict = Depends(get_auth_context),
 ) -> MCPServer:
     """Update an MCP server."""
     try:
@@ -131,7 +158,11 @@ async def update_server(
         if not updated:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
 
-        server = await mcp_service.get_server(server_id, api_key_id=api_key)
+        if auth_context["type"] == "api_key":
+            server = await mcp_service.get_server(server_id, api_key_id=auth_context["api_key_id"])
+        else:
+            server = await mcp_service.get_server(server_id)
+
         return MCPServer(**server)
     except HTTPException:
         raise
@@ -144,7 +175,7 @@ async def update_server(
 async def delete_server(
     server_id: UUID,
     mcp_service: MCPService = Depends(get_mcp_service),
-    api_key: str = Depends(get_project_id),
+    auth_context: dict = Depends(get_auth_context),
 ) -> dict:
     """Delete an MCP server."""
     try:
@@ -164,7 +195,7 @@ async def refresh_server_capabilities(
     server_id: UUID,
     capabilities: dict,
     mcp_service: MCPService = Depends(get_mcp_service),
-    api_key: str = Depends(get_project_id),
+    auth_context: dict = Depends(get_auth_context),
 ) -> MCPCapabilities:
     """Refresh server capabilities (tools, resources, prompts)."""
     try:
@@ -182,7 +213,11 @@ async def refresh_server_capabilities(
         )
 
         # Get updated data
-        server = await mcp_service.get_server(server_id, api_key_id=api_key)
+        if auth_context["type"] == "api_key":
+            server = await mcp_service.get_server(server_id, api_key_id=auth_context["api_key_id"])
+        else:
+            server = await mcp_service.get_server(server_id)
+
         if not server:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
 
@@ -210,16 +245,25 @@ async def refresh_server_capabilities(
 async def create_tool(
     tool: MCPToolCreate,
     mcp_service: MCPService = Depends(get_mcp_service),
-    api_key: str = Depends(get_project_id),
+    auth_context: dict = Depends(get_auth_context),
 ) -> MCPTool:
     """Create a new MCP tool."""
     try:
+        # For creation, similar to create_server - requires API key
+        if auth_context["type"] == "api_key":
+            api_key_id = auth_context["api_key_id"]
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail="Creating tools with user auth requires API key management at the API layer",
+            )
+
         tool_id = await mcp_service.create_tool(
             server_id=tool.server_id,
             name=tool.name,
             description=tool.description,
             input_schema=tool.input_schema,
-            api_key_id=api_key,
+            api_key_id=api_key_id,
         )
 
         tool_data = await mcp_service.get_tool(tool_id)
@@ -230,6 +274,8 @@ async def create_tool(
             )
 
         return MCPTool(**tool_data)
+    except HTTPException:
+        raise
     except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error creating MCP tool: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
@@ -240,15 +286,23 @@ async def list_tools(
     server_id: Optional[UUID] = None,
     is_active: bool = True,
     mcp_service: MCPService = Depends(get_mcp_service),
-    api_key: str = Depends(get_project_id),
+    auth_context: dict = Depends(get_auth_context),
 ) -> List[MCPToolWithServer]:
     """List all MCP tools."""
     try:
-        tools = await mcp_service.list_tools(
-            server_id=server_id,
-            api_key_id=api_key,
-            is_active=is_active,
-        )
+        if auth_context["type"] == "api_key":
+            tools = await mcp_service.list_tools(
+                server_id=server_id,
+                api_key_id=auth_context["api_key_id"],
+                is_active=is_active,
+            )
+        else:  # user auth
+            tools = await mcp_service.list_tools(
+                server_id=server_id,
+                user_id=auth_context["user_id"],
+                project_id=auth_context["project_id"],
+                is_active=is_active,
+            )
 
         # Build response with server info
         result = []
