@@ -73,7 +73,7 @@ async def create_server(
             api_key_id=api_key_id,
         )
 
-        server_data = await mcp_service.get_server(server_id)
+        server_data = await mcp_service.get_server(server_id, api_key_id=api_key_id)
         if not server_data:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -124,8 +124,12 @@ async def get_server(
         if auth_context["type"] == "api_key":
             server = await mcp_service.get_server(server_id, api_key_id=auth_context["api_key_id"])
         else:
-            # For user auth, we get the server without api_key filter and verify access via project ownership
-            server = await mcp_service.get_server(server_id)
+            # User auth - verify access via project ownership
+            server = await mcp_service.get_server(
+                server_id,
+                user_id=auth_context["user_id"],
+                project_id=auth_context["project_id"],
+            )
 
         if not server:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
@@ -146,6 +150,22 @@ async def update_server(
 ) -> MCPServer:
     """Update an MCP server."""
     try:
+        # First verify the server exists and user has access
+        if auth_context["type"] == "api_key":
+            existing_server = await mcp_service.get_server(
+                server_id, api_key_id=auth_context["api_key_id"]
+            )
+        else:
+            existing_server = await mcp_service.get_server(
+                server_id,
+                user_id=auth_context["user_id"],
+                project_id=auth_context["project_id"],
+            )
+
+        if not existing_server:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
+
+        # Now update the server
         updated = await mcp_service.update_server(
             server_id=server_id,
             name=update.name,
@@ -158,10 +178,15 @@ async def update_server(
         if not updated:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
 
+        # Get the updated server (reuse auth context)
         if auth_context["type"] == "api_key":
             server = await mcp_service.get_server(server_id, api_key_id=auth_context["api_key_id"])
         else:
-            server = await mcp_service.get_server(server_id)
+            server = await mcp_service.get_server(
+                server_id,
+                user_id=auth_context["user_id"],
+                project_id=auth_context["project_id"],
+            )
 
         return MCPServer(**server)
     except HTTPException:
@@ -179,6 +204,22 @@ async def delete_server(
 ) -> dict:
     """Delete an MCP server."""
     try:
+        # First verify the server exists and user has access
+        if auth_context["type"] == "api_key":
+            existing_server = await mcp_service.get_server(
+                server_id, api_key_id=auth_context["api_key_id"]
+            )
+        else:
+            existing_server = await mcp_service.get_server(
+                server_id,
+                user_id=auth_context["user_id"],
+                project_id=auth_context["project_id"],
+            )
+
+        if not existing_server:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
+
+        # Now delete the server
         deleted = await mcp_service.delete_server(server_id)
         if not deleted:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
@@ -199,6 +240,21 @@ async def refresh_server_capabilities(
 ) -> MCPCapabilities:
     """Refresh server capabilities (tools, resources, prompts)."""
     try:
+        # First verify the server exists and user has access
+        if auth_context["type"] == "api_key":
+            existing_server = await mcp_service.get_server(
+                server_id, api_key_id=auth_context["api_key_id"]
+            )
+        else:
+            existing_server = await mcp_service.get_server(
+                server_id,
+                user_id=auth_context["user_id"],
+                project_id=auth_context["project_id"],
+            )
+
+        if not existing_server:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
+
         # Extract tools, resources, prompts from capabilities
         tools = capabilities.get("tools", [])
         resources = capabilities.get("resources", [])
@@ -212,11 +268,15 @@ async def refresh_server_capabilities(
             prompts=prompts,
         )
 
-        # Get updated data
+        # Get updated data (reuse auth context)
         if auth_context["type"] == "api_key":
             server = await mcp_service.get_server(server_id, api_key_id=auth_context["api_key_id"])
         else:
-            server = await mcp_service.get_server(server_id)
+            server = await mcp_service.get_server(
+                server_id,
+                user_id=auth_context["user_id"],
+                project_id=auth_context["project_id"],
+            )
 
         if not server:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")

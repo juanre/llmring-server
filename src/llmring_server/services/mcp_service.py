@@ -68,28 +68,46 @@ class MCPService:
         return result["id"]
 
     async def get_server(
-        self, server_id: UUID, api_key_id: Optional[str] = None
+        self,
+        server_id: UUID,
+        api_key_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        project_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Get an MCP server by ID.
 
+        Accepts either:
+        - api_key_id: for programmatic API key authentication
+        - user_id + project_id: for browser/JWT authentication
+
         Args:
             server_id: Server ID
-            api_key_id: Optional API key ID for filtering
+            api_key_id: API key ID for filtering (API key auth)
+            user_id: User ID for JWT authentication
+            project_id: Project ID for JWT authentication
 
         Returns:
             Server data or None
         """
-        query = """
-            SELECT * FROM mcp_client.servers
-            WHERE id = $1
-        """
-        params = [server_id]
+        if api_key_id:
+            # API key authentication - filter by api_key_id
+            query = """
+                SELECT * FROM mcp_client.servers
+                WHERE id = $1 AND api_key_id = $2
+            """
+            result = await self.db.fetch_one(query, server_id, api_key_id)
+        elif user_id and project_id:
+            # User authentication - filter by project_id via cross-schema join
+            query = """
+                SELECT s.*
+                FROM mcp_client.servers s
+                JOIN llmring_api.api_keys k ON k.id = s.api_key_id
+                WHERE s.id = $1 AND k.project_id = $2
+            """
+            result = await self.db.fetch_one(query, server_id, project_id)
+        else:
+            raise ValueError("Must provide either api_key_id or (user_id + project_id)")
 
-        if api_key_id is not None:
-            query += " AND api_key_id = $2"
-            params.append(api_key_id)
-
-        result = await self.db.fetch_one(query, *params)
         if not result:
             return None
 
