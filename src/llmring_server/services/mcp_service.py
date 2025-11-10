@@ -156,7 +156,7 @@ class MCPService:
                 SELECT s.*
                 FROM mcp_client.servers s
                 JOIN llmring_api.api_keys k ON k.id = s.api_key_id
-                WHERE k.project_id = $1 AND s.is_active = $2
+                WHERE k.project_id = $1::uuid AND s.is_active = $2
                 ORDER BY s.created_at DESC
             """
             results = await self.db.fetch_all(query, project_id, is_active)
