@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pgdbm import AsyncDatabaseManager
 
 from llmring_server.config import Settings
-from llmring_server.dependencies import get_db, get_project_id, get_settings
+from llmring_server.dependencies import get_auth_context, get_db, get_settings
 from llmring_server.models.conversations import (
     Conversation,
     ConversationCreate,
@@ -29,7 +29,7 @@ router = APIRouter(prefix="/api/v1/conversations", tags=["conversations"])
 @router.post("/", response_model=Conversation)
 async def create_conversation(
     conversation_data: ConversationCreate,
-    project_key: str = Depends(get_project_id),
+    auth_context: dict = Depends(get_auth_context),
     db: AsyncDatabaseManager = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> Conversation:
@@ -39,8 +39,20 @@ async def create_conversation(
 
     service = ConversationService(db, settings)
 
-    # Set the api_key_id to the project_key from the header
-    conversation_data.api_key_id = project_key
+    # For creation, we need an api_key_id to associate with the conversation
+    # API key auth provides it directly
+    # User auth requires API key management (handled by llmring-api layer)
+    if auth_context["type"] == "api_key":
+        api_key_id = auth_context["api_key_id"]
+    else:
+        # User auth: API key should be passed in request or managed by caller
+        # For now, user auth is supported but requires explicit api_key handling
+        raise HTTPException(
+            status_code=501,
+            detail="Creating conversations with user auth requires API key management at the API layer",
+        )
+
+    conversation_data.api_key_id = api_key_id
 
     result = await service.create_conversation(conversation_data)
     if not result:
@@ -54,7 +66,7 @@ async def get_conversation(
     conversation_id: UUID,
     include_messages: bool = Query(True, description="Include messages in response"),
     message_limit: int = Query(100, ge=1, le=1000, description="Maximum messages to return"),
-    project_key: str = Depends(get_project_id),
+    auth_context: dict = Depends(get_auth_context),
     db: AsyncDatabaseManager = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> ConversationWithMessages:
@@ -62,11 +74,29 @@ async def get_conversation(
     service = ConversationService(db, settings)
 
     if include_messages:
-        result = await service.get_conversation_with_messages(
-            conversation_id, api_key_id=project_key, message_limit=message_limit
-        )
+        if auth_context["type"] == "api_key":
+            result = await service.get_conversation_with_messages(
+                conversation_id, api_key_id=auth_context["api_key_id"], message_limit=message_limit
+            )
+        else:
+            result = await service.get_conversation_with_messages(
+                conversation_id,
+                user_id=auth_context["user_id"],
+                project_id=auth_context["project_id"],
+                message_limit=message_limit,
+            )
     else:
-        conversation = await service.get_conversation(conversation_id, api_key_id=project_key)
+        if auth_context["type"] == "api_key":
+            conversation = await service.get_conversation(
+                conversation_id, api_key_id=auth_context["api_key_id"]
+            )
+        else:
+            conversation = await service.get_conversation(
+                conversation_id,
+                user_id=auth_context["user_id"],
+                project_id=auth_context["project_id"],
+            )
+
         if conversation:
             result = ConversationWithMessages(**conversation.model_dump(), messages=[])
         else:
@@ -82,14 +112,24 @@ async def get_conversation(
 async def update_conversation(
     conversation_id: UUID,
     update_data: ConversationUpdate,
-    project_key: str = Depends(get_project_id),
+    auth_context: dict = Depends(get_auth_context),
     db: AsyncDatabaseManager = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> Conversation:
     """Update a conversation."""
     service = ConversationService(db, settings)
 
-    result = await service.update_conversation(conversation_id, update_data, api_key_id=project_key)
+    if auth_context["type"] == "api_key":
+        result = await service.update_conversation(
+            conversation_id, update_data, api_key_id=auth_context["api_key_id"]
+        )
+    else:
+        result = await service.update_conversation(
+            conversation_id,
+            update_data,
+            user_id=auth_context["user_id"],
+            project_id=auth_context["project_id"],
+        )
 
     if not result:
         raise HTTPException(404, "Conversation not found")
@@ -101,16 +141,26 @@ async def update_conversation(
 async def list_conversations(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    project_key: str = Depends(get_project_id),
+    auth_context: dict = Depends(get_auth_context),
     db: AsyncDatabaseManager = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> List[Conversation]:
-    """List conversations for the authenticated API key."""
+    """List conversations for the authenticated user."""
     if not settings.enable_conversation_tracking:
         return []
 
     service = ConversationService(db, settings)
-    return await service.list_conversations(project_key, limit, offset)
+    if auth_context["type"] == "api_key":
+        return await service.list_conversations(
+            api_key_id=auth_context["api_key_id"], limit=limit, offset=offset
+        )
+    else:
+        return await service.list_conversations(
+            user_id=auth_context["user_id"],
+            project_id=auth_context["project_id"],
+            limit=limit,
+            offset=offset,
+        )
 
 
 @router.get("/{conversation_id}/messages", response_model=List[Message])
@@ -118,15 +168,25 @@ async def get_conversation_messages(
     conversation_id: UUID,
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    project_key: str = Depends(get_project_id),
+    auth_context: dict = Depends(get_auth_context),
     db: AsyncDatabaseManager = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> List[Message]:
     """Get messages for a conversation."""
     service = ConversationService(db, settings)
 
-    # Verify conversation belongs to API key
-    conversation = await service.get_conversation(conversation_id, api_key_id=project_key)
+    # Verify conversation belongs to user
+    if auth_context["type"] == "api_key":
+        conversation = await service.get_conversation(
+            conversation_id, api_key_id=auth_context["api_key_id"]
+        )
+    else:
+        conversation = await service.get_conversation(
+            conversation_id,
+            user_id=auth_context["user_id"],
+            project_id=auth_context["project_id"],
+        )
+
     if not conversation:
         raise HTTPException(404, "Conversation not found")
 
@@ -137,7 +197,7 @@ async def get_conversation_messages(
 async def add_messages_batch(
     conversation_id: UUID,
     batch: MessageBatch,
-    project_key: str = Depends(get_project_id),
+    auth_context: dict = Depends(get_auth_context),
     db: AsyncDatabaseManager = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> List[Message]:
@@ -147,8 +207,18 @@ async def add_messages_batch(
 
     service = ConversationService(db, settings)
 
-    # Verify conversation belongs to API key
-    conversation = await service.get_conversation(conversation_id, api_key_id=project_key)
+    # Verify conversation belongs to user
+    if auth_context["type"] == "api_key":
+        conversation = await service.get_conversation(
+            conversation_id, api_key_id=auth_context["api_key_id"]
+        )
+    else:
+        conversation = await service.get_conversation(
+            conversation_id,
+            user_id=auth_context["user_id"],
+            project_id=auth_context["project_id"],
+        )
+
     if not conversation:
         raise HTTPException(404, "Conversation not found")
 
@@ -161,7 +231,7 @@ async def add_messages_batch(
 @router.delete("/old-messages")
 async def cleanup_old_messages(
     retention_days: Optional[int] = Query(None, description="Override default retention days"),
-    project_key: str = Depends(get_project_id),
+    auth_context: dict = Depends(get_auth_context),
     db: AsyncDatabaseManager = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> dict:
@@ -180,7 +250,7 @@ async def cleanup_old_messages(
 @router.post("/log", response_model=ConversationLogResponse)
 async def log_conversation(
     log_request: ConversationLogRequest,
-    project_key: str = Depends(get_project_id),
+    auth_context: dict = Depends(get_auth_context),
     db: AsyncDatabaseManager = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> ConversationLogResponse:
@@ -203,9 +273,22 @@ async def log_conversation(
 
     conversation_service = ConversationService(db, settings)
 
+    # For logging, we need an api_key_id to associate with the conversation
+    # API key auth provides it directly
+    # User auth requires API key management (handled by llmring-api layer)
+    if auth_context["type"] == "api_key":
+        api_key_id = auth_context["api_key_id"]
+    else:
+        # User auth: API key should be passed in request or managed by caller
+        # For now, user auth is supported but requires explicit api_key handling
+        raise HTTPException(
+            status_code=501,
+            detail="Logging conversations with user auth requires API key management at the API layer",
+        )
+
     # Log the conversation
     result = await conversation_service.log_conversation(
-        api_key_id=project_key,
+        api_key_id=api_key_id,
         messages=log_request.messages,
         response=log_request.response,
         metadata=log_request.metadata.model_dump(),

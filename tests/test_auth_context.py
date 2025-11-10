@@ -23,6 +23,22 @@ async def setup_api_keys_table(llmring_db):
         )
         """
     )
+    # Create conversations table for conversation tests
+    await llmring_db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS {{tables.conversations}} (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            api_key_id VARCHAR(255) NOT NULL,
+            title VARCHAR(255),
+            system_prompt TEXT,
+            model_alias VARCHAR(255),
+            temperature FLOAT,
+            max_tokens INT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+        """
+    )
     return llmring_db
 
 
@@ -306,3 +322,184 @@ async def test_mcp_refresh_server_capabilities_authorization_bypass(test_app, se
     assert (
         response.status_code == 404
     ), "Authorization bypass: user can refresh capabilities for server from different project"
+
+
+@pytest.mark.asyncio
+async def test_conversation_list_with_user_auth(test_app, setup_api_keys_table):
+    """Test listing conversations with user authentication filters by project."""
+    llmring_db = setup_api_keys_table
+
+    # Create API key for project 1
+    await llmring_db.execute(
+        """
+        INSERT INTO llmring_api.api_keys (id, project_id, name, key_hash)
+        VALUES ('00000000-0000-0000-0000-000000000001'::uuid, '10000000-0000-0000-0000-000000000001'::uuid, 'Test Key 1', 'hash1')
+        """
+    )
+
+    # Create API key for project 2
+    await llmring_db.execute(
+        """
+        INSERT INTO llmring_api.api_keys (id, project_id, name, key_hash)
+        VALUES ('00000000-0000-0000-0000-000000000002'::uuid, '10000000-0000-0000-0000-000000000002'::uuid, 'Test Key 2', 'hash2')
+        """
+    )
+
+    # Create conversation for project 1
+    await llmring_db.execute(
+        """
+        INSERT INTO {{tables.conversations}} (api_key_id, title, model_alias)
+        VALUES ('00000000-0000-0000-0000-000000000001', 'Project 1 Conversation', 'default')
+        """
+    )
+
+    # Create conversation for project 2
+    await llmring_db.execute(
+        """
+        INSERT INTO {{tables.conversations}} (api_key_id, title, model_alias)
+        VALUES ('00000000-0000-0000-0000-000000000002', 'Project 2 Conversation', 'default')
+        """
+    )
+
+    # User 1 lists conversations - should only see project 1's conversations
+    response = await test_app.get(
+        "/api/v1/conversations/",
+        headers={"X-User-ID": "user-1", "X-Project-ID": "10000000-0000-0000-0000-000000000001"},
+    )
+
+    assert response.status_code == 200
+    conversations = response.json()
+    assert len(conversations) == 1
+    assert conversations[0]["title"] == "Project 1 Conversation"
+
+    # User 2 lists conversations - should only see project 2's conversations
+    response = await test_app.get(
+        "/api/v1/conversations/",
+        headers={"X-User-ID": "user-2", "X-Project-ID": "10000000-0000-0000-0000-000000000002"},
+    )
+
+    assert response.status_code == 200
+    conversations = response.json()
+    assert len(conversations) == 1
+    assert conversations[0]["title"] == "Project 2 Conversation"
+
+
+@pytest.mark.asyncio
+async def test_conversation_get_authorization_bypass(test_app, setup_api_keys_table):
+    """Test that get_conversation prevents cross-project access with user auth.
+
+    SECURITY TEST: This test ensures users cannot access conversations
+    from projects they don't own.
+    """
+    llmring_db = setup_api_keys_table
+
+    # Create API key for project 1
+    await llmring_db.execute(
+        """
+        INSERT INTO llmring_api.api_keys (id, project_id, name, key_hash)
+        VALUES ('00000000-0000-0000-0000-000000000001'::uuid, '10000000-0000-0000-0000-000000000001'::uuid, 'Test Key 1', 'hash1')
+        """
+    )
+
+    # Create conversation for project 1
+    result = await llmring_db.fetch_one(
+        """
+        INSERT INTO {{tables.conversations}} (api_key_id, title, model_alias)
+        VALUES ('00000000-0000-0000-0000-000000000001', 'Private Conversation', 'default')
+        RETURNING id
+        """
+    )
+    conversation_id = result["id"]
+
+    # User from project 2 tries to access project 1's conversation - should get 404
+    response = await test_app.get(
+        f"/api/v1/conversations/{conversation_id}",
+        headers={"X-User-ID": "user-2", "X-Project-ID": "10000000-0000-0000-0000-000000000002"},
+    )
+
+    assert (
+        response.status_code == 404
+    ), "Authorization bypass: user can access conversation from different project"
+
+
+@pytest.mark.asyncio
+async def test_conversation_update_authorization_bypass(test_app, setup_api_keys_table):
+    """Test that update_conversation prevents cross-project modification with user auth.
+
+    SECURITY TEST: This test ensures users cannot modify conversations
+    from projects they don't own.
+    """
+    llmring_db = setup_api_keys_table
+
+    # Create API key for project 1
+    await llmring_db.execute(
+        """
+        INSERT INTO llmring_api.api_keys (id, project_id, name, key_hash)
+        VALUES ('00000000-0000-0000-0000-000000000001'::uuid, '10000000-0000-0000-0000-000000000001'::uuid, 'Test Key 1', 'hash1')
+        """
+    )
+
+    # Create conversation for project 1
+    result = await llmring_db.fetch_one(
+        """
+        INSERT INTO {{tables.conversations}} (api_key_id, title, model_alias)
+        VALUES ('00000000-0000-0000-0000-000000000001', 'Original Title', 'default')
+        RETURNING id
+        """
+    )
+    conversation_id = result["id"]
+
+    # User from project 2 tries to modify project 1's conversation - should get 404
+    response = await test_app.patch(
+        f"/api/v1/conversations/{conversation_id}",
+        json={"title": "Hacked Title"},
+        headers={"X-User-ID": "user-2", "X-Project-ID": "10000000-0000-0000-0000-000000000002"},
+    )
+
+    assert (
+        response.status_code == 404
+    ), "Authorization bypass: user can modify conversation from different project"
+
+    # Verify conversation was not modified
+    result = await llmring_db.fetch_one(
+        "SELECT title FROM {{tables.conversations}} WHERE id = $1", conversation_id
+    )
+    assert result["title"] == "Original Title", "Conversation should not have been modified"
+
+
+@pytest.mark.asyncio
+async def test_conversation_messages_authorization_bypass(test_app, setup_api_keys_table):
+    """Test that get_conversation_messages prevents cross-project access.
+
+    SECURITY TEST: This test ensures users cannot access messages
+    from conversations in projects they don't own.
+    """
+    llmring_db = setup_api_keys_table
+
+    # Create API key for project 1
+    await llmring_db.execute(
+        """
+        INSERT INTO llmring_api.api_keys (id, project_id, name, key_hash)
+        VALUES ('00000000-0000-0000-0000-000000000001'::uuid, '10000000-0000-0000-0000-000000000001'::uuid, 'Test Key 1', 'hash1')
+        """
+    )
+
+    # Create conversation for project 1
+    result = await llmring_db.fetch_one(
+        """
+        INSERT INTO {{tables.conversations}} (api_key_id, title, model_alias)
+        VALUES ('00000000-0000-0000-0000-000000000001', 'Private Conversation', 'default')
+        RETURNING id
+        """
+    )
+    conversation_id = result["id"]
+
+    # User from project 2 tries to access project 1's conversation messages - should get 404
+    response = await test_app.get(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers={"X-User-ID": "user-2", "X-Project-ID": "10000000-0000-0000-0000-000000000002"},
+    )
+
+    assert (
+        response.status_code == 404
+    ), "Authorization bypass: user can access messages from conversation in different project"

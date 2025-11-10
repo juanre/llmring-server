@@ -60,18 +60,41 @@ class ConversationService:
         return Conversation(**result) if result else None
 
     async def get_conversation(
-        self, conversation_id: UUID, api_key_id: Optional[str] = None
+        self,
+        conversation_id: UUID,
+        api_key_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        project_id: Optional[str] = None,
     ) -> Optional[Conversation]:
-        """Get a conversation by ID."""
-        query = """
-            SELECT * FROM {{tables.conversations}}
-            WHERE id = $1
-        """
-        params = [conversation_id]
+        """Get a conversation by ID.
 
+        Accepts either:
+        - api_key_id: for programmatic API key authentication
+        - user_id + project_id: for browser/JWT authentication
+        """
         if api_key_id:
-            query += " AND api_key_id = $2"
-            params.append(api_key_id)
+            # API key authentication - filter by api_key_id
+            query = """
+                SELECT * FROM {{tables.conversations}}
+                WHERE id = $1 AND api_key_id = $2
+            """
+            params = [conversation_id, api_key_id]
+        elif user_id and project_id:
+            # User authentication - filter by project_id via cross-schema join
+            query = """
+                SELECT c.*
+                FROM {{tables.conversations}} c
+                JOIN llmring_api.api_keys k ON k.id::text = c.api_key_id
+                WHERE c.id = $1 AND k.project_id = $2
+            """
+            params = [conversation_id, project_id]
+        else:
+            # No filtering - allow for internal use
+            query = """
+                SELECT * FROM {{tables.conversations}}
+                WHERE id = $1
+            """
+            params = [conversation_id]
 
         result = await self.db.fetch_one(query, *params)
         return Conversation(**result) if result else None
@@ -81,8 +104,15 @@ class ConversationService:
         conversation_id: UUID,
         update: ConversationUpdate,
         api_key_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        project_id: Optional[str] = None,
     ) -> Optional[Conversation]:
-        """Update a conversation."""
+        """Update a conversation.
+
+        Accepts either:
+        - api_key_id: for programmatic API key authentication
+        - user_id + project_id: for browser/JWT authentication
+        """
         # Build update query dynamically
         updates = []
         params = []
@@ -114,25 +144,46 @@ class ConversationService:
             param_count += 1
 
         if not updates:
-            return await self.get_conversation(conversation_id, api_key_id)
+            return await self.get_conversation(conversation_id, api_key_id, user_id, project_id)
 
         updates.append(f"updated_at = ${param_count}")
         params.append(datetime.now(timezone.utc))
         param_count += 1
 
-        query = f"""
-            UPDATE {{{{tables.conversations}}}}
-            SET {', '.join(updates)}
-            WHERE id = ${param_count}
-        """
-        params.append(conversation_id)
-        param_count += 1
-
         if api_key_id:
+            # API key authentication
+            query = f"""
+                UPDATE {{{{tables.conversations}}}}
+                SET {', '.join(updates)}
+                WHERE id = ${param_count}
+            """
+            params.append(conversation_id)
+            param_count += 1
             query += f" AND api_key_id = ${param_count}"
             params.append(api_key_id)
-
-        query += " RETURNING *"
+            query += " RETURNING *"
+        elif user_id and project_id:
+            # User authentication - update via cross-schema join
+            query = f"""
+                UPDATE {{{{tables.conversations}}}} c
+                SET {', '.join(updates)}
+                FROM llmring_api.api_keys k
+                WHERE c.id = ${param_count} AND k.id::text = c.api_key_id AND k.project_id = ${param_count + 1}
+                RETURNING c.*
+            """
+            params.append(conversation_id)
+            params.append(project_id)
+            param_count += 2
+        else:
+            # No filtering - allow for internal use
+            query = f"""
+                UPDATE {{{{tables.conversations}}}}
+                SET {', '.join(updates)}
+                WHERE id = ${param_count}
+                RETURNING *
+            """
+            params.append(conversation_id)
+            param_count += 1
 
         result = await self.db.fetch_one(query, *params)
         return Conversation(**result) if result else None
@@ -234,10 +285,17 @@ class ConversationService:
         self,
         conversation_id: UUID,
         api_key_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        project_id: Optional[str] = None,
         message_limit: int = 100,
     ) -> Optional[ConversationWithMessages]:
-        """Get a conversation with its messages."""
-        conversation = await self.get_conversation(conversation_id, api_key_id)
+        """Get a conversation with its messages.
+
+        Accepts either:
+        - api_key_id: for programmatic API key authentication
+        - user_id + project_id: for browser/JWT authentication
+        """
+        conversation = await self.get_conversation(conversation_id, api_key_id, user_id, project_id)
         if not conversation:
             return None
 
@@ -329,17 +387,42 @@ class ConversationService:
         return result
 
     async def list_conversations(
-        self, api_key_id: str, limit: int = 20, offset: int = 0
+        self,
+        api_key_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+        limit: int = 20,
+        offset: int = 0,
     ) -> List[Conversation]:
-        """List conversations for an API key."""
-        query = """
-            SELECT * FROM {{tables.conversations}}
-            WHERE api_key_id = $1
-            ORDER BY updated_at DESC
-            LIMIT $2 OFFSET $3
-        """
+        """List conversations.
 
-        results = await self.db.fetch_all(query, api_key_id, limit, offset)
+        Accepts either:
+        - api_key_id: for programmatic API key authentication
+        - user_id + project_id: for browser/JWT authentication
+        """
+        if api_key_id:
+            # API key authentication - filter by api_key_id
+            query = """
+                SELECT * FROM {{tables.conversations}}
+                WHERE api_key_id = $1
+                ORDER BY updated_at DESC
+                LIMIT $2 OFFSET $3
+            """
+            results = await self.db.fetch_all(query, api_key_id, limit, offset)
+        elif user_id and project_id:
+            # User authentication - filter by project_id via cross-schema join
+            query = """
+                SELECT c.*
+                FROM {{tables.conversations}} c
+                JOIN llmring_api.api_keys k ON k.id::text = c.api_key_id
+                WHERE k.project_id = $1
+                ORDER BY c.updated_at DESC
+                LIMIT $2 OFFSET $3
+            """
+            results = await self.db.fetch_all(query, project_id, limit, offset)
+        else:
+            raise ValueError("Must provide either api_key_id or (user_id + project_id)")
+
         return [Conversation(**r) for r in results]
 
     async def log_conversation(
