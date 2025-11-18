@@ -29,6 +29,7 @@ from llmring_server.models.mcp import (
     MCPToolWithServer,
 )
 from llmring_server.services.mcp_service import MCPService
+from llmring_server.utils.auth_helpers import dispatch_by_auth_type, verify_resource_access
 
 logger = logging.getLogger(__name__)
 
@@ -121,18 +122,16 @@ async def get_server(
 ) -> MCPServer:
     """Get an MCP server by ID."""
     try:
-        if auth_context["type"] == "api_key":
-            server = await mcp_service.get_server(server_id, api_key_id=auth_context["api_key_id"])
-        else:
-            # User auth - verify access via project ownership
-            server = await mcp_service.get_server(
+        server = await dispatch_by_auth_type(
+            auth_context,
+            lambda: mcp_service.get_server(server_id, api_key_id=auth_context["api_key_id"]),
+            lambda: mcp_service.get_server(
                 server_id,
                 user_id=auth_context["user_id"],
                 project_id=auth_context["project_id"],
-            )
-
-        if not server:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
+            ),
+        )
+        server = await verify_resource_access(server, "Server")
         return MCPServer(**server)
     except HTTPException:
         raise
@@ -151,19 +150,16 @@ async def update_server(
     """Update an MCP server."""
     try:
         # First verify the server exists and user has access
-        if auth_context["type"] == "api_key":
-            existing_server = await mcp_service.get_server(
-                server_id, api_key_id=auth_context["api_key_id"]
-            )
-        else:
-            existing_server = await mcp_service.get_server(
+        existing_server = await dispatch_by_auth_type(
+            auth_context,
+            lambda: mcp_service.get_server(server_id, api_key_id=auth_context["api_key_id"]),
+            lambda: mcp_service.get_server(
                 server_id,
                 user_id=auth_context["user_id"],
                 project_id=auth_context["project_id"],
-            )
-
-        if not existing_server:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
+            ),
+        )
+        await verify_resource_access(existing_server, "Server")
 
         # Now update the server
         updated = await mcp_service.update_server(
@@ -179,14 +175,15 @@ async def update_server(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
 
         # Get the updated server (reuse auth context)
-        if auth_context["type"] == "api_key":
-            server = await mcp_service.get_server(server_id, api_key_id=auth_context["api_key_id"])
-        else:
-            server = await mcp_service.get_server(
+        server = await dispatch_by_auth_type(
+            auth_context,
+            lambda: mcp_service.get_server(server_id, api_key_id=auth_context["api_key_id"]),
+            lambda: mcp_service.get_server(
                 server_id,
                 user_id=auth_context["user_id"],
                 project_id=auth_context["project_id"],
-            )
+            ),
+        )
 
         return MCPServer(**server)
     except HTTPException:
