@@ -64,14 +64,17 @@ async def test_user_auth_context():
 
     # Mock request with X-User-ID and X-Project-ID headers
     class MockRequest:
-        headers = {"x-user-id": "user-123", "x-project-id": "project-456"}
+        headers = {
+            "x-user-id": "00000000-0000-0000-0000-000000000001",
+            "x-project-id": "10000000-0000-0000-0000-000000000001",
+        }
 
     request = MockRequest()
     context = await get_auth_context(request)
 
     assert context["type"] == "user"
-    assert context["user_id"] == "user-123"
-    assert context["project_id"] == "project-456"
+    assert context["user_id"] == "00000000-0000-0000-0000-000000000001"
+    assert context["project_id"] == "10000000-0000-0000-0000-000000000001"
     assert context.get("api_key_id") is None
 
 
@@ -133,7 +136,10 @@ async def test_mcp_list_servers_with_user_auth(test_app, setup_api_keys_table):
     # User 1 lists servers - should only see project 1's servers
     response = await test_app.get(
         "/api/v1/mcp/servers",
-        headers={"X-User-ID": "user-1", "X-Project-ID": "10000000-0000-0000-0000-000000000001"},
+        headers={
+            "X-User-ID": "20000000-0000-0000-0000-000000000001",
+            "X-Project-ID": "10000000-0000-0000-0000-000000000001",
+        },
     )
 
     assert response.status_code == 200
@@ -144,7 +150,10 @@ async def test_mcp_list_servers_with_user_auth(test_app, setup_api_keys_table):
     # User 2 lists servers - should only see project 2's servers
     response = await test_app.get(
         "/api/v1/mcp/servers",
-        headers={"X-User-ID": "user-2", "X-Project-ID": "10000000-0000-0000-0000-000000000002"},
+        headers={
+            "X-User-ID": "20000000-0000-0000-0000-000000000002",
+            "X-Project-ID": "10000000-0000-0000-0000-000000000002",
+        },
     )
 
     assert response.status_code == 200
@@ -184,7 +193,10 @@ async def test_mcp_get_server_authorization_bypass(test_app, setup_api_keys_tabl
     # User from project 2 tries to access project 1's server - should get 404
     response = await test_app.get(
         f"/api/v1/mcp/servers/{server_id}",
-        headers={"X-User-ID": "user-2", "X-Project-ID": "10000000-0000-0000-0000-000000000002"},
+        headers={
+            "X-User-ID": "20000000-0000-0000-0000-000000000002",
+            "X-Project-ID": "10000000-0000-0000-0000-000000000002",
+        },
     )
 
     # SECURITY VIOLATION: This currently returns 200 instead of 404
@@ -224,7 +236,10 @@ async def test_mcp_update_server_authorization_bypass(test_app, setup_api_keys_t
     response = await test_app.patch(
         f"/api/v1/mcp/servers/{server_id}",
         json={"name": "Hacked Name"},
-        headers={"X-User-ID": "user-2", "X-Project-ID": "10000000-0000-0000-0000-000000000002"},
+        headers={
+            "X-User-ID": "20000000-0000-0000-0000-000000000002",
+            "X-Project-ID": "10000000-0000-0000-0000-000000000002",
+        },
     )
 
     # SECURITY VIOLATION: This currently returns 200 instead of 404
@@ -269,7 +284,10 @@ async def test_mcp_delete_server_authorization_bypass(test_app, setup_api_keys_t
     # User from project 2 tries to delete project 1's server - should get 404
     response = await test_app.delete(
         f"/api/v1/mcp/servers/{server_id}",
-        headers={"X-User-ID": "user-2", "X-Project-ID": "10000000-0000-0000-0000-000000000002"},
+        headers={
+            "X-User-ID": "20000000-0000-0000-0000-000000000002",
+            "X-Project-ID": "10000000-0000-0000-0000-000000000002",
+        },
     )
 
     # SECURITY VIOLATION: This currently returns 200 instead of 404
@@ -315,7 +333,10 @@ async def test_mcp_refresh_server_capabilities_authorization_bypass(test_app, se
     response = await test_app.post(
         f"/api/v1/mcp/servers/{server_id}/refresh",
         json={"tools": [], "resources": [], "prompts": []},
-        headers={"X-User-ID": "user-2", "X-Project-ID": "10000000-0000-0000-0000-000000000002"},
+        headers={
+            "X-User-ID": "20000000-0000-0000-0000-000000000002",
+            "X-Project-ID": "10000000-0000-0000-0000-000000000002",
+        },
     )
 
     # SECURITY VIOLATION: This currently returns 200 instead of 404
@@ -364,7 +385,10 @@ async def test_conversation_list_with_user_auth(test_app, setup_api_keys_table):
     # User 1 lists conversations - should only see project 1's conversations
     response = await test_app.get(
         "/api/v1/conversations/",
-        headers={"X-User-ID": "user-1", "X-Project-ID": "10000000-0000-0000-0000-000000000001"},
+        headers={
+            "X-User-ID": "20000000-0000-0000-0000-000000000001",
+            "X-Project-ID": "10000000-0000-0000-0000-000000000001",
+        },
     )
 
     assert response.status_code == 200
@@ -375,7 +399,10 @@ async def test_conversation_list_with_user_auth(test_app, setup_api_keys_table):
     # User 2 lists conversations - should only see project 2's conversations
     response = await test_app.get(
         "/api/v1/conversations/",
-        headers={"X-User-ID": "user-2", "X-Project-ID": "10000000-0000-0000-0000-000000000002"},
+        headers={
+            "X-User-ID": "20000000-0000-0000-0000-000000000002",
+            "X-Project-ID": "10000000-0000-0000-0000-000000000002",
+        },
     )
 
     assert response.status_code == 200
@@ -414,7 +441,10 @@ async def test_conversation_get_authorization_bypass(test_app, setup_api_keys_ta
     # User from project 2 tries to access project 1's conversation - should get 404
     response = await test_app.get(
         f"/api/v1/conversations/{conversation_id}",
-        headers={"X-User-ID": "user-2", "X-Project-ID": "10000000-0000-0000-0000-000000000002"},
+        headers={
+            "X-User-ID": "20000000-0000-0000-0000-000000000002",
+            "X-Project-ID": "10000000-0000-0000-0000-000000000002",
+        },
     )
 
     assert (
@@ -453,7 +483,10 @@ async def test_conversation_update_authorization_bypass(test_app, setup_api_keys
     response = await test_app.patch(
         f"/api/v1/conversations/{conversation_id}",
         json={"title": "Hacked Title"},
-        headers={"X-User-ID": "user-2", "X-Project-ID": "10000000-0000-0000-0000-000000000002"},
+        headers={
+            "X-User-ID": "20000000-0000-0000-0000-000000000002",
+            "X-Project-ID": "10000000-0000-0000-0000-000000000002",
+        },
     )
 
     assert (
@@ -497,9 +530,30 @@ async def test_conversation_messages_authorization_bypass(test_app, setup_api_ke
     # User from project 2 tries to access project 1's conversation messages - should get 404
     response = await test_app.get(
         f"/api/v1/conversations/{conversation_id}/messages",
-        headers={"X-User-ID": "user-2", "X-Project-ID": "10000000-0000-0000-0000-000000000002"},
+        headers={
+            "X-User-ID": "20000000-0000-0000-0000-000000000002",
+            "X-Project-ID": "10000000-0000-0000-0000-000000000002",
+        },
     )
 
     assert (
         response.status_code == 404
     ), "Authorization bypass: user can access messages from conversation in different project"
+
+
+@pytest.mark.asyncio
+async def test_invalid_uuid_format_raises_400():
+    """Test that invalid UUID format in headers raises 400."""
+
+    class MockRequest:
+        headers = {"x-user-id": "not-a-uuid", "x-project-id": "also-not-a-uuid"}
+
+    request = MockRequest()
+
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_auth_context(request)
+
+    assert exc_info.value.status_code == 400
+    assert "Invalid UUID format" in exc_info.value.detail

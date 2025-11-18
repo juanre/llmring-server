@@ -2,6 +2,7 @@
 # ABOUTME: Provides get_project_id for authentication and get_db for database injection.
 
 from typing import Dict, Optional
+from uuid import UUID
 
 from fastapi import HTTPException, Request
 from pgdbm import AsyncDatabaseManager
@@ -53,6 +54,15 @@ async def get_auth_context(request: Request) -> Dict[str, Optional[str]]:
         if not user_id or not project_id:
             raise HTTPException(
                 status_code=401, detail="X-User-ID and X-Project-ID cannot be empty"
+            )
+
+        # Validate UUID format
+        try:
+            UUID(user_id)
+            UUID(project_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=400, detail="Invalid UUID format in authentication headers"
             )
 
         return {
