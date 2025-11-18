@@ -3,7 +3,7 @@
 
 import pytest
 import pytest_asyncio
-from fastapi import Request
+from fastapi import HTTPException, Request
 
 from llmring_server.dependencies import get_auth_context
 
@@ -21,6 +21,34 @@ async def setup_api_keys_table(llmring_db):
             name VARCHAR(255) NOT NULL,
             key_hash VARCHAR(255) NOT NULL
         )
+        """
+    )
+    await llmring_db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS llmring_api.projects (
+            id UUID PRIMARY KEY,
+            user_id UUID NOT NULL,
+            name VARCHAR(255),
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+        """
+    )
+    await llmring_db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS llmring_api.project_members (
+            project_id UUID REFERENCES llmring_api.projects(id) ON DELETE CASCADE,
+            user_id UUID NOT NULL,
+            PRIMARY KEY (project_id, user_id)
+        )
+        """
+    )
+    await llmring_db.execute(
+        """
+        INSERT INTO llmring_api.projects (id, user_id, name)
+        VALUES
+            ('10000000-0000-0000-0000-000000000001'::uuid, '20000000-0000-0000-0000-000000000001'::uuid, 'Project One'),
+            ('10000000-0000-0000-0000-000000000002'::uuid, '20000000-0000-0000-0000-000000000002'::uuid, 'Project Two')
+        ON CONFLICT (id) DO NOTHING
         """
     )
     # Create conversations table for conversation tests
@@ -88,12 +116,78 @@ async def test_no_auth_context_raises_401():
 
     request = MockRequest()
 
-    from fastapi import HTTPException
-
     with pytest.raises(HTTPException) as exc_info:
         await get_auth_context(request)
 
     assert exc_info.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_user_auth_membership_validation(setup_api_keys_table):
+    """Ensure user authentication requires verified project membership."""
+
+    db = setup_api_keys_table
+
+    class MockState:
+        def __init__(self, db):
+            self.db = db
+            self.enforce_user_project_membership = True
+
+    class MockApp:
+        def __init__(self, db):
+            self.state = MockState(db)
+
+    class MockRequest:
+        def __init__(self, headers, db):
+            self.headers = headers
+            self.app = MockApp(db)
+
+    # Valid membership (user owns project)
+    request = MockRequest(
+        {
+            "x-user-id": "20000000-0000-0000-0000-000000000001",
+            "x-project-id": "10000000-0000-0000-0000-000000000001",
+        },
+        db,
+    )
+    context = await get_auth_context(request)
+    assert context["type"] == "user"
+
+    # Same user requesting different project they do not own
+    unauthorized_request = MockRequest(
+        {
+            "x-user-id": "20000000-0000-0000-0000-000000000001",
+            "x-project-id": "10000000-0000-0000-0000-000000000002",
+        },
+        db,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_auth_context(unauthorized_request)
+
+    assert exc_info.value.status_code == 404
+
+    # Add user 2 as MEMBER (not owner) of project 1
+    await db.execute(
+        """
+        INSERT INTO llmring_api.project_members (project_id, user_id)
+        VALUES ('10000000-0000-0000-0000-000000000001'::uuid,
+                '20000000-0000-0000-0000-000000000002'::uuid)
+        """
+    )
+
+    # User 2 should now have access to project 1 as a member
+    member_request = MockRequest(
+        {
+            "x-user-id": "20000000-0000-0000-0000-000000000002",
+            "x-project-id": "10000000-0000-0000-0000-000000000001",
+        },
+        db,
+    )
+    context = await get_auth_context(member_request)
+    assert context["type"] == "user"
+    assert context["user_id"] == "20000000-0000-0000-0000-000000000002"
+    assert context["project_id"] == "10000000-0000-0000-0000-000000000001"
 
 
 @pytest.mark.asyncio
