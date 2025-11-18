@@ -101,7 +101,7 @@ class MCPService:
             query = """
                 SELECT s.*
                 FROM mcp_client.servers s
-                JOIN llmring_api.api_keys k ON k.id = s.api_key_id::uuid
+                JOIN llmring_api.api_keys k ON k.id::text = s.api_key_id
                 WHERE s.id = $1 AND k.project_id = $2
             """
             result = await self.db.fetch_one(query, server_id, project_id)
@@ -155,8 +155,8 @@ class MCPService:
             query = """
                 SELECT s.*
                 FROM mcp_client.servers s
-                JOIN llmring_api.api_keys k ON k.id = s.api_key_id::uuid
-                WHERE k.project_id = $1::uuid AND s.is_active = $2
+                JOIN llmring_api.api_keys k ON k.id::text = s.api_key_id
+                WHERE k.project_id::text = $1 AND s.is_active = $2
                 ORDER BY s.created_at DESC
             """
             results = await self.db.fetch_all(query, project_id, is_active)
@@ -427,7 +427,7 @@ class MCPService:
                 SELECT t.*, s.name as server_name, s.url as server_url
                 FROM mcp_client.tools t
                 JOIN mcp_client.servers s ON t.server_id = s.id
-                JOIN llmring_api.api_keys k ON k.id = t.api_key_id::uuid
+                JOIN llmring_api.api_keys k ON k.id::text = t.api_key_id
                 WHERE t.is_active = $1 AND k.project_id = $2
             """
             params = [is_active, project_id]
