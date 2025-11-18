@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from pgdbm import AsyncDatabaseManager
 
-from llmring_server.dependencies import get_db, get_project_id
+from llmring_server.dependencies import get_auth_context, get_db
 from llmring_server.models.usage import UsageLogEntry, UsageLogRequest, UsageLogResponse, UsageStats
 from llmring_server.services.usage import UsageService
 
@@ -21,10 +21,28 @@ router = APIRouter(
 @router.post("/log", response_model=UsageLogResponse)
 async def log_usage(
     log: UsageLogRequest,
-    project_id: str = Depends(get_project_id),
+    auth_context: dict = Depends(get_auth_context),
     db: AsyncDatabaseManager = Depends(get_db),
 ) -> UsageLogResponse:
     service = UsageService(db)
+
+    # Get the api_key_id to use for logging
+    if auth_context["type"] == "api_key":
+        api_key_id = auth_context["api_key_id"]
+    else:
+        # For user auth, we need to get the first active API key for the project
+        query = """
+        SELECT id::text as api_key_id
+        FROM llmring_api.api_keys
+        WHERE project_id = $1 AND is_active = true
+        LIMIT 1
+        """
+        result = await db.fetch_one(query, auth_context["project_id"])
+        if not result:
+            from fastapi import HTTPException
+
+            raise HTTPException(400, "No active API key found for project")
+        api_key_id = result["api_key_id"]
 
     # No built-in rate limiting in core server
     # Calculate cost if not provided
@@ -54,7 +72,7 @@ async def log_usage(
                 )
 
     timestamp = datetime.now()
-    result = await service.log_usage(project_id, log, cost, timestamp)
+    result = await service.log_usage(api_key_id, log, cost, timestamp)
 
     # Handle both old string return and new dict return for compatibility
     if isinstance(result, dict):
@@ -72,12 +90,31 @@ async def get_stats(
     group_by: str = Query(
         "day", description="Group results by time period", enum=["day", "week", "month"]
     ),
-    project_id: str = Depends(get_project_id),
+    auth_context: dict = Depends(get_auth_context),
     db: AsyncDatabaseManager = Depends(get_db),
 ):
     service = UsageService(db)
+
+    # Get the api_key_id to use for filtering
+    if auth_context["type"] == "api_key":
+        api_key_id = auth_context["api_key_id"]
+    else:
+        # For user auth, we need to get the first active API key for the project
+        query = """
+        SELECT id::text as api_key_id
+        FROM llmring_api.api_keys
+        WHERE project_id = $1 AND is_active = true
+        LIMIT 1
+        """
+        result = await db.fetch_one(query, auth_context["project_id"])
+        if not result:
+            from fastapi import HTTPException
+
+            raise HTTPException(400, "No active API key found for project")
+        api_key_id = result["api_key_id"]
+
     return await service.get_stats(
-        api_key_id=project_id,
+        api_key_id=api_key_id,
         start_date=start_date,
         end_date=end_date,
         group_by=group_by,
@@ -93,12 +130,31 @@ async def list_usage_logs(
     alias: Optional[str] = Query(None, description="Filter by alias"),
     model: Optional[str] = Query(None, description="Filter by model"),
     origin: Optional[str] = Query(None, description="Filter by origin"),
-    project_id: str = Depends(get_project_id),
+    auth_context: dict = Depends(get_auth_context),
     db: AsyncDatabaseManager = Depends(get_db),
 ):
     service = UsageService(db)
+
+    # Get the api_key_id to use for filtering
+    if auth_context["type"] == "api_key":
+        api_key_id = auth_context["api_key_id"]
+    else:
+        # For user auth, we need to get the first active API key for the project
+        query = """
+        SELECT id::text as api_key_id
+        FROM llmring_api.api_keys
+        WHERE project_id = $1 AND is_active = true
+        LIMIT 1
+        """
+        result = await db.fetch_one(query, auth_context["project_id"])
+        if not result:
+            from fastapi import HTTPException
+
+            raise HTTPException(400, "No active API key found for project")
+        api_key_id = result["api_key_id"]
+
     logs = await service.get_logs(
-        api_key_id=project_id,
+        api_key_id=api_key_id,
         limit=limit,
         offset=offset,
         start_date=start_date,

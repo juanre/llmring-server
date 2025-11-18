@@ -36,7 +36,7 @@ class TemplateService:
 
         query = """
         INSERT INTO {{tables.conversation_templates}} (
-            id, project_id, name, description, system_prompt,
+            id, api_key_id, name, description, system_prompt,
             model, temperature, max_tokens, tool_config, created_by,
             is_active, usage_count, created_at, updated_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
@@ -47,7 +47,7 @@ class TemplateService:
             result = await self.db.fetch_one(
                 query,
                 template_id,
-                template_data.project_id,
+                template_data.api_key_id,
                 template_data.name,
                 template_data.description,
                 template_data.system_prompt,
@@ -71,19 +71,38 @@ class TemplateService:
             return None
 
     async def get_template(
-        self, template_id: UUID, project_id: Optional[str] = None
+        self,
+        template_id: UUID,
+        api_key_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        project_id: Optional[str] = None,
     ) -> Optional[ConversationTemplate]:
-        """Get a conversation template by ID."""
-        query = """
-        SELECT * FROM {{tables.conversation_templates}}
-        WHERE id = $1 AND is_active = true
-        """
-        params = [template_id]
+        """Get a conversation template by ID.
 
-        # Add project filter if specified
-        if project_id:
-            query += " AND (project_id = $2 OR project_id IS NULL)"
-            params.append(project_id)
+        Accepts either:
+        - api_key_id: for programmatic API key authentication
+        - user_id + project_id: for browser/JWT authentication
+        """
+        if api_key_id:
+            # API key authentication - filter by api_key_id
+            query = """
+            SELECT * FROM {{tables.conversation_templates}}
+            WHERE id = $1 AND is_active = true
+            AND (api_key_id = $2 OR api_key_id IS NULL)
+            """
+            params = [template_id, api_key_id]
+        elif user_id and project_id:
+            # User authentication - filter by project_id via cross-schema join
+            query = """
+            SELECT t.*
+            FROM {{tables.conversation_templates}} t
+            LEFT JOIN llmring_api.api_keys k ON k.id::text = t.api_key_id
+            WHERE t.id = $1 AND t.is_active = true
+            AND (k.project_id = $2 OR t.api_key_id IS NULL)
+            """
+            params = [template_id, project_id]
+        else:
+            raise ValueError("Must provide either api_key_id or (user_id + project_id)")
 
         try:
             result = await self.db.fetch_one(query, *params)
@@ -97,22 +116,39 @@ class TemplateService:
 
     async def list_templates(
         self,
+        api_key_id: Optional[str] = None,
+        user_id: Optional[str] = None,
         project_id: Optional[str] = None,
         created_by: Optional[str] = None,
         limit: int = 50,
         offset: int = 0,
     ) -> List[ConversationTemplate]:
-        """List conversation templates."""
-        query = """
-        SELECT * FROM {{tables.conversation_templates}}
-        WHERE is_active = true
-        """
-        params = []
+        """List conversation templates.
 
-        # Add filters
-        if project_id:
-            query += " AND (project_id = $1 OR project_id IS NULL)"
-            params.append(project_id)
+        Accepts either:
+        - api_key_id: for programmatic API key authentication
+        - user_id + project_id: for browser/JWT authentication
+        """
+        if api_key_id:
+            # API key authentication - filter by api_key_id
+            query = """
+            SELECT * FROM {{tables.conversation_templates}}
+            WHERE is_active = true
+            AND (api_key_id = $1 OR api_key_id IS NULL)
+            """
+            params = [api_key_id]
+        elif user_id and project_id:
+            # User authentication - filter by project_id via cross-schema join
+            query = """
+            SELECT t.*
+            FROM {{tables.conversation_templates}} t
+            LEFT JOIN llmring_api.api_keys k ON k.id::text = t.api_key_id
+            WHERE t.is_active = true
+            AND (k.project_id = $1 OR t.api_key_id IS NULL)
+            """
+            params = [project_id]
+        else:
+            raise ValueError("Must provide either api_key_id or (user_id + project_id)")
 
         if created_by:
             param_num = len(params) + 1
@@ -137,11 +173,15 @@ class TemplateService:
         self,
         template_id: UUID,
         update_data: ConversationTemplateUpdate,
+        api_key_id: Optional[str] = None,
+        user_id: Optional[str] = None,
         project_id: Optional[str] = None,
     ) -> Optional[ConversationTemplate]:
         """Update a conversation template."""
         # First check if template exists and belongs to project
-        existing = await self.get_template(template_id, project_id)
+        existing = await self.get_template(
+            template_id, api_key_id=api_key_id, user_id=user_id, project_id=project_id
+        )
         if not existing:
             return None
 
@@ -185,19 +225,27 @@ class TemplateService:
             logger.error(f"Error updating conversation template: {e}")
             return None
 
-    async def delete_template(self, template_id: UUID, project_id: Optional[str] = None) -> bool:
+    async def delete_template(
+        self,
+        template_id: UUID,
+        api_key_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+    ) -> bool:
         """Delete a conversation template (soft delete)."""
+        # First check if template exists and belongs to project
+        existing = await self.get_template(
+            template_id, api_key_id=api_key_id, user_id=user_id, project_id=project_id
+        )
+        if not existing:
+            return False
+
         query = """
         UPDATE {{tables.conversation_templates}}
         SET is_active = false, updated_at = $1
         WHERE id = $2 AND is_active = true
         """
         params = [datetime.now(), template_id]
-
-        # Add project filter if specified
-        if project_id:
-            query += " AND (project_id = $3 OR project_id IS NULL)"
-            params.append(project_id)
 
         try:
             result = await self.db.execute(query, *params)
@@ -208,24 +256,29 @@ class TemplateService:
             return False
 
     async def use_template(
-        self, template_id: UUID, project_id: Optional[str] = None
+        self,
+        template_id: UUID,
+        api_key_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        project_id: Optional[str] = None,
     ) -> Optional[ConversationTemplate]:
         """Mark a template as used and update usage statistics."""
+        # First check if template exists and belongs to project
+        existing = await self.get_template(
+            template_id, api_key_id=api_key_id, user_id=user_id, project_id=project_id
+        )
+        if not existing:
+            return None
+
         query = """
         UPDATE {{tables.conversation_templates}}
         SET usage_count = usage_count + 1,
             last_used_at = $1,
             updated_at = $1
         WHERE id = $2 AND is_active = true
+        RETURNING *
         """
         params = [datetime.now(), template_id]
-
-        # Add project filter if specified
-        if project_id:
-            query += " AND (project_id = $3 OR project_id IS NULL)"
-            params.append(project_id)
-
-        query += " RETURNING *"
 
         try:
             result = await self.db.fetch_one(query, *params)
@@ -238,21 +291,41 @@ class TemplateService:
             return None
 
     async def get_template_stats(
-        self, project_id: Optional[str] = None, limit: int = 20
+        self,
+        api_key_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+        limit: int = 20,
     ) -> List[ConversationTemplateStats]:
-        """Get usage statistics for conversation templates."""
-        query = """
-        SELECT id as template_id, name as template_name, usage_count,
-               last_used_at, created_at
-        FROM {{tables.conversation_templates}}
-        WHERE is_active = true
-        """
-        params = []
+        """Get usage statistics for conversation templates.
 
-        # Add project filter if specified
-        if project_id:
-            query += " AND (project_id = $1 OR project_id IS NULL)"
-            params.append(project_id)
+        Accepts either:
+        - api_key_id: for programmatic API key authentication
+        - user_id + project_id: for browser/JWT authentication
+        """
+        if api_key_id:
+            # API key authentication - filter by api_key_id
+            query = """
+            SELECT id as template_id, name as template_name, usage_count,
+                   last_used_at, created_at
+            FROM {{tables.conversation_templates}}
+            WHERE is_active = true
+            AND (api_key_id = $1 OR api_key_id IS NULL)
+            """
+            params = [api_key_id]
+        elif user_id and project_id:
+            # User authentication - filter by project_id via cross-schema join
+            query = """
+            SELECT t.id as template_id, t.name as template_name, t.usage_count,
+                   t.last_used_at, t.created_at
+            FROM {{tables.conversation_templates}} t
+            LEFT JOIN llmring_api.api_keys k ON k.id::text = t.api_key_id
+            WHERE t.is_active = true
+            AND (k.project_id = $1 OR t.api_key_id IS NULL)
+            """
+            params = [project_id]
+        else:
+            raise ValueError("Must provide either api_key_id or (user_id + project_id)")
 
         # Order by usage and limit
         query += " ORDER BY usage_count DESC, last_used_at DESC"

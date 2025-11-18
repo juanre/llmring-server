@@ -25,7 +25,9 @@ class ConversationTemplateBase(BaseModel):
 class ConversationTemplateCreate(ConversationTemplateBase):
     """Model for creating a conversation template."""
 
-    project_id: Optional[UUID] = Field(None, description="Project that owns this template")
+    api_key_id: Optional[str] = Field(
+        None, max_length=255, description="API key that owns this template"
+    )
     created_by: str = Field(..., max_length=255, description="User who created this template")
 
 
@@ -46,7 +48,7 @@ class ConversationTemplate(ConversationTemplateBase):
     """Full conversation template model."""
 
     id: UUID
-    project_id: Optional[UUID]  # NULL for global templates
+    api_key_id: Optional[str]  # NULL for global templates
     created_by: str
     is_active: bool = True
     usage_count: int = 0
