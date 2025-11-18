@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pgdbm import AsyncDatabaseManager
 from pydantic import ValidationError
 
-from llmring_server.dependencies import get_auth_context, get_db, get_project_id
+from llmring_server.dependencies import get_auth_context, get_db
 from llmring_server.models.mcp import (
     MCPCapabilities,
     MCPPrompt,

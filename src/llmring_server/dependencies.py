@@ -1,5 +1,5 @@
 # ABOUTME: FastAPI dependencies for API key validation and database access.
-# ABOUTME: Provides get_project_id for authentication and get_db for database injection.
+# ABOUTME: Provides get_auth_context for authentication and get_db for database injection.
 
 from typing import Dict, Optional
 from uuid import UUID
@@ -77,28 +77,6 @@ async def get_auth_context(request: Request) -> Dict[str, Optional[str]]:
         status_code=401,
         detail="Authentication required: provide X-API-Key or (X-User-ID + X-Project-ID)",
     )
-
-
-async def get_project_id(request: Request) -> str:
-    """Extract and require the API key header (legacy compatibility).
-
-    This function is maintained for backward compatibility with existing routes.
-    New routes should use get_auth_context() for full context.
-
-    Returns the api_key_id for API key auth, or api_key_id for user auth
-    (user auth will be handled by looking up project's first active API key).
-    """
-    context = await get_auth_context(request)
-
-    if context["type"] == "api_key":
-        return context["api_key_id"]
-    else:
-        # For user auth, routes will need to handle user_id + project_id
-        # This is a transitional approach - routes should migrate to get_auth_context
-        raise HTTPException(
-            status_code=500,
-            detail="Route not yet updated for user authentication - use get_auth_context",
-        )
 
 
 async def get_db(request: Request) -> AsyncDatabaseManager:
