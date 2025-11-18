@@ -323,7 +323,7 @@ async def create_tool(
             api_key_id=api_key_id,
         )
 
-        tool_data = await mcp_service.get_tool(tool_id)
+        tool_data = await mcp_service.get_tool(tool_id, api_key_id=api_key_id)
         if not tool_data:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -395,10 +395,22 @@ async def list_tools(
 async def get_tool(
     tool_id: UUID,
     mcp_service: MCPService = Depends(get_mcp_service),
+    auth_context: dict = Depends(get_auth_context),
 ) -> MCPToolWithServer:
     """Get an MCP tool by ID."""
     try:
-        tool = await mcp_service.get_tool(tool_id)
+        if auth_context["type"] == "api_key":
+            tool = await mcp_service.get_tool(
+                tool_id,
+                api_key_id=auth_context["api_key_id"],
+            )
+        else:
+            tool = await mcp_service.get_tool(
+                tool_id,
+                user_id=auth_context["user_id"],
+                project_id=auth_context["project_id"],
+            )
+
         if not tool:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tool not found")
 
@@ -432,6 +444,7 @@ async def record_tool_execution(
     tool_id: UUID,
     request: MCPToolExecutionRequest,
     mcp_service: MCPService = Depends(get_mcp_service),
+    auth_context: dict = Depends(get_auth_context),
 ) -> MCPToolExecutionResponse:
     """Record an MCP tool execution for observability.
 
@@ -439,6 +452,22 @@ async def record_tool_execution(
     Actual tool execution happens client-side via AsyncMCPClient.
     """
     try:
+        # Verify tool exists and user has access
+        if auth_context["type"] == "api_key":
+            tool = await mcp_service.get_tool(
+                tool_id,
+                api_key_id=auth_context["api_key_id"],
+            )
+        else:
+            tool = await mcp_service.get_tool(
+                tool_id,
+                user_id=auth_context["user_id"],
+                project_id=auth_context["project_id"],
+            )
+
+        if not tool:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tool not found")
+
         # Record the execution with all provided data
         execution_id = await mcp_service.record_tool_execution(
             tool_id=tool_id,
@@ -459,6 +488,8 @@ async def record_tool_execution(
             duration_ms=request.duration_ms,
             executed_at=datetime.now(timezone.utc),
         )
+    except HTTPException:
+        raise
     except (asyncpg.PostgresError, ValidationError, ValueError, ConnectionError) as e:
         logger.error(f"Error recording MCP tool execution: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
@@ -469,14 +500,33 @@ async def get_tool_history(
     tool_id: UUID,
     limit: int = 100,
     mcp_service: MCPService = Depends(get_mcp_service),
+    auth_context: dict = Depends(get_auth_context),
 ) -> List[MCPToolExecution]:
     """Get tool execution history."""
     try:
+        # Verify tool exists and user has access
+        if auth_context["type"] == "api_key":
+            tool = await mcp_service.get_tool(
+                tool_id,
+                api_key_id=auth_context["api_key_id"],
+            )
+        else:
+            tool = await mcp_service.get_tool(
+                tool_id,
+                user_id=auth_context["user_id"],
+                project_id=auth_context["project_id"],
+            )
+
+        if not tool:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tool not found")
+
         executions = await mcp_service.get_tool_history(
             tool_id=tool_id,
             limit=limit,
         )
         return [MCPToolExecution(**e) for e in executions]
+    except HTTPException:
+        raise
     except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error getting tool history: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
@@ -488,17 +538,25 @@ async def get_tool_history(
 @router.get("/resources", response_model=List[MCPResource])
 async def list_resources(
     server_id: Optional[UUID] = None,
-    api_key_id: Optional[UUID] = None,
     is_active: bool = True,
     mcp_service: MCPService = Depends(get_mcp_service),
+    auth_context: dict = Depends(get_auth_context),
 ) -> List[MCPResource]:
     """List all MCP resources."""
     try:
-        resources = await mcp_service.list_resources(
-            server_id=server_id,
-            api_key_id=api_key_id,
-            is_active=is_active,
-        )
+        if auth_context["type"] == "api_key":
+            resources = await mcp_service.list_resources(
+                server_id=server_id,
+                api_key_id=auth_context["api_key_id"],
+                is_active=is_active,
+            )
+        else:
+            resources = await mcp_service.list_resources(
+                server_id=server_id,
+                user_id=auth_context["user_id"],
+                project_id=auth_context["project_id"],
+                is_active=is_active,
+            )
         return [MCPResource(**r) for r in resources]
     except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error listing MCP resources: {e}")
@@ -509,10 +567,22 @@ async def list_resources(
 async def get_resource(
     resource_id: UUID,
     mcp_service: MCPService = Depends(get_mcp_service),
+    auth_context: dict = Depends(get_auth_context),
 ) -> MCPResource:
     """Get an MCP resource by ID."""
     try:
-        resource = await mcp_service.get_resource(resource_id)
+        if auth_context["type"] == "api_key":
+            resource = await mcp_service.get_resource(
+                resource_id,
+                api_key_id=auth_context["api_key_id"],
+            )
+        else:
+            resource = await mcp_service.get_resource(
+                resource_id,
+                user_id=auth_context["user_id"],
+                project_id=auth_context["project_id"],
+            )
+
         if not resource:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
         return MCPResource(**resource)
@@ -527,10 +597,22 @@ async def get_resource(
 async def get_resource_content(
     resource_id: UUID,
     mcp_service: MCPService = Depends(get_mcp_service),
+    auth_context: dict = Depends(get_auth_context),
 ) -> dict:
     """Get resource content."""
     try:
-        resource = await mcp_service.get_resource(resource_id)
+        if auth_context["type"] == "api_key":
+            resource = await mcp_service.get_resource(
+                resource_id,
+                api_key_id=auth_context["api_key_id"],
+            )
+        else:
+            resource = await mcp_service.get_resource(
+                resource_id,
+                user_id=auth_context["user_id"],
+                project_id=auth_context["project_id"],
+            )
+
         if not resource:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
 
@@ -550,17 +632,25 @@ async def get_resource_content(
 @router.get("/prompts", response_model=List[MCPPrompt])
 async def list_prompts(
     server_id: Optional[UUID] = None,
-    api_key_id: Optional[UUID] = None,
     is_active: bool = True,
     mcp_service: MCPService = Depends(get_mcp_service),
+    auth_context: dict = Depends(get_auth_context),
 ) -> List[MCPPrompt]:
     """List all MCP prompts."""
     try:
-        prompts = await mcp_service.list_prompts(
-            server_id=server_id,
-            api_key_id=api_key_id,
-            is_active=is_active,
-        )
+        if auth_context["type"] == "api_key":
+            prompts = await mcp_service.list_prompts(
+                server_id=server_id,
+                api_key_id=auth_context["api_key_id"],
+                is_active=is_active,
+            )
+        else:
+            prompts = await mcp_service.list_prompts(
+                server_id=server_id,
+                user_id=auth_context["user_id"],
+                project_id=auth_context["project_id"],
+                is_active=is_active,
+            )
         return [MCPPrompt(**p) for p in prompts]
     except (asyncpg.PostgresError, ValidationError, ValueError) as e:
         logger.error(f"Error listing MCP prompts: {e}")
@@ -571,10 +661,22 @@ async def list_prompts(
 async def get_prompt(
     prompt_id: UUID,
     mcp_service: MCPService = Depends(get_mcp_service),
+    auth_context: dict = Depends(get_auth_context),
 ) -> MCPPrompt:
     """Get an MCP prompt by ID."""
     try:
-        prompt = await mcp_service.get_prompt(prompt_id)
+        if auth_context["type"] == "api_key":
+            prompt = await mcp_service.get_prompt(
+                prompt_id,
+                api_key_id=auth_context["api_key_id"],
+            )
+        else:
+            prompt = await mcp_service.get_prompt(
+                prompt_id,
+                user_id=auth_context["user_id"],
+                project_id=auth_context["project_id"],
+            )
+
         if not prompt:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found")
         return MCPPrompt(**prompt)
@@ -590,10 +692,22 @@ async def render_prompt(
     prompt_id: UUID,
     arguments: dict,
     mcp_service: MCPService = Depends(get_mcp_service),
+    auth_context: dict = Depends(get_auth_context),
 ) -> dict:
     """Render a prompt with arguments."""
     try:
-        prompt = await mcp_service.get_prompt(prompt_id)
+        if auth_context["type"] == "api_key":
+            prompt = await mcp_service.get_prompt(
+                prompt_id,
+                api_key_id=auth_context["api_key_id"],
+            )
+        else:
+            prompt = await mcp_service.get_prompt(
+                prompt_id,
+                user_id=auth_context["user_id"],
+                project_id=auth_context["project_id"],
+            )
+
         if not prompt:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found")
 

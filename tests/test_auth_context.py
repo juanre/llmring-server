@@ -557,3 +557,183 @@ async def test_invalid_uuid_format_raises_400():
 
     assert exc_info.value.status_code == 400
     assert "Invalid UUID format" in exc_info.value.detail
+
+
+@pytest.mark.asyncio
+async def test_mcp_endpoints_require_authentication(test_app):
+    """Test that all MCP endpoints reject unauthenticated requests."""
+    # Test endpoints that should require authentication
+    endpoints = [
+        ("GET", "/api/v1/mcp/tools/00000000-0000-0000-0000-000000000001"),
+        ("POST", "/api/v1/mcp/tools/00000000-0000-0000-0000-000000000001/execute"),
+        ("GET", "/api/v1/mcp/tools/00000000-0000-0000-0000-000000000001/history"),
+        ("GET", "/api/v1/mcp/resources"),
+        ("GET", "/api/v1/mcp/resources/00000000-0000-0000-0000-000000000001"),
+        ("GET", "/api/v1/mcp/resources/00000000-0000-0000-0000-000000000001/content"),
+        ("GET", "/api/v1/mcp/prompts"),
+        ("GET", "/api/v1/mcp/prompts/00000000-0000-0000-0000-000000000001"),
+        ("POST", "/api/v1/mcp/prompts/00000000-0000-0000-0000-000000000001/render"),
+    ]
+
+    for method, endpoint in endpoints:
+        if method == "GET":
+            response = await test_app.get(endpoint)
+        elif method == "POST":
+            response = await test_app.post(endpoint, json={})
+
+        assert (
+            response.status_code == 401
+        ), f"{method} {endpoint} should require authentication (got {response.status_code})"
+
+
+@pytest.mark.asyncio
+async def test_mcp_tool_get_authorization_bypass(test_app, setup_api_keys_table):
+    """Test that get_tool prevents cross-project access with user auth.
+
+    SECURITY TEST: This test ensures users cannot access tools
+    from projects they don't own.
+    """
+    llmring_db = setup_api_keys_table
+
+    # Create API key for project 1
+    await llmring_db.execute(
+        """
+        INSERT INTO llmring_api.api_keys (id, project_id, name, key_hash)
+        VALUES ('00000000-0000-0000-0000-000000000001'::uuid, '10000000-0000-0000-0000-000000000001'::uuid, 'Test Key 1', 'hash1')
+        """
+    )
+
+    # Create server for project 1
+    server_result = await llmring_db.fetch_one(
+        """
+        INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id)
+        VALUES ('Server 1', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001')
+        RETURNING id
+        """
+    )
+
+    # Create tool for project 1
+    tool_result = await llmring_db.fetch_one(
+        """
+        INSERT INTO mcp_client.tools (server_id, name, description, input_schema, api_key_id)
+        VALUES ($1, 'Private Tool', 'Secret tool', '{}', '00000000-0000-0000-0000-000000000001')
+        RETURNING id
+        """,
+        server_result["id"],
+    )
+    tool_id = tool_result["id"]
+
+    # User from project 2 tries to access project 1's tool - should get 404
+    response = await test_app.get(
+        f"/api/v1/mcp/tools/{tool_id}",
+        headers={
+            "X-User-ID": "20000000-0000-0000-0000-000000000002",
+            "X-Project-ID": "10000000-0000-0000-0000-000000000002",
+        },
+    )
+
+    assert (
+        response.status_code == 404
+    ), "Authorization bypass: user can access tool from different project"
+
+
+@pytest.mark.asyncio
+async def test_mcp_resource_get_authorization_bypass(test_app, setup_api_keys_table):
+    """Test that get_resource prevents cross-project access with user auth.
+
+    SECURITY TEST: This test ensures users cannot access resources
+    from projects they don't own.
+    """
+    llmring_db = setup_api_keys_table
+
+    # Create API key for project 1
+    await llmring_db.execute(
+        """
+        INSERT INTO llmring_api.api_keys (id, project_id, name, key_hash)
+        VALUES ('00000000-0000-0000-0000-000000000001'::uuid, '10000000-0000-0000-0000-000000000001'::uuid, 'Test Key 1', 'hash1')
+        """
+    )
+
+    # Create server for project 1
+    server_result = await llmring_db.fetch_one(
+        """
+        INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id)
+        VALUES ('Server 1', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001')
+        RETURNING id
+        """
+    )
+
+    # Create resource for project 1
+    resource_result = await llmring_db.fetch_one(
+        """
+        INSERT INTO mcp_client.resources (server_id, uri, name, description, api_key_id)
+        VALUES ($1, 'file://secret.txt', 'Secret Resource', 'Private data', '00000000-0000-0000-0000-000000000001')
+        RETURNING id
+        """,
+        server_result["id"],
+    )
+    resource_id = resource_result["id"]
+
+    # User from project 2 tries to access project 1's resource - should get 404
+    response = await test_app.get(
+        f"/api/v1/mcp/resources/{resource_id}",
+        headers={
+            "X-User-ID": "20000000-0000-0000-0000-000000000002",
+            "X-Project-ID": "10000000-0000-0000-0000-000000000002",
+        },
+    )
+
+    assert (
+        response.status_code == 404
+    ), "Authorization bypass: user can access resource from different project"
+
+
+@pytest.mark.asyncio
+async def test_mcp_prompt_get_authorization_bypass(test_app, setup_api_keys_table):
+    """Test that get_prompt prevents cross-project access with user auth.
+
+    SECURITY TEST: This test ensures users cannot access prompts
+    from projects they don't own.
+    """
+    llmring_db = setup_api_keys_table
+
+    # Create API key for project 1
+    await llmring_db.execute(
+        """
+        INSERT INTO llmring_api.api_keys (id, project_id, name, key_hash)
+        VALUES ('00000000-0000-0000-0000-000000000001'::uuid, '10000000-0000-0000-0000-000000000001'::uuid, 'Test Key 1', 'hash1')
+        """
+    )
+
+    # Create server for project 1
+    server_result = await llmring_db.fetch_one(
+        """
+        INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id)
+        VALUES ('Server 1', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001')
+        RETURNING id
+        """
+    )
+
+    # Create prompt for project 1
+    prompt_result = await llmring_db.fetch_one(
+        """
+        INSERT INTO mcp_client.prompts (server_id, name, description, api_key_id)
+        VALUES ($1, 'Secret Prompt', 'Private prompt', '00000000-0000-0000-0000-000000000001')
+        RETURNING id
+        """,
+        server_result["id"],
+    )
+    prompt_id = prompt_result["id"]
+
+    # User from project 2 tries to access project 1's prompt - should get 404
+    response = await test_app.get(
+        f"/api/v1/mcp/prompts/{prompt_id}",
+        headers={
+            "X-User-ID": "20000000-0000-0000-0000-000000000002",
+            "X-Project-ID": "10000000-0000-0000-0000-000000000002",
+        },
+    )
+
+    assert (
+        response.status_code == 404
+    ), "Authorization bypass: user can access prompt from different project"

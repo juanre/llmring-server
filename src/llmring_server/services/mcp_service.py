@@ -451,23 +451,50 @@ class MCPService:
             tools.append(tool)
         return tools
 
-    async def get_tool(self, tool_id: UUID) -> Optional[Dict[str, Any]]:
+    async def get_tool(
+        self,
+        tool_id: UUID,
+        api_key_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
         """Get an MCP tool by ID.
+
+        Accepts either:
+        - api_key_id: for programmatic API key authentication
+        - user_id + project_id: for browser/JWT authentication
 
         Args:
             tool_id: Tool ID
+            api_key_id: API key ID for filtering (API key auth)
+            user_id: User ID for JWT authentication
+            project_id: Project ID for JWT authentication
 
         Returns:
             Tool data or None
         """
-        query = """
-            SELECT t.*, s.name as server_name, s.url as server_url
-            FROM mcp_client.tools t
-            JOIN mcp_client.servers s ON t.server_id = s.id
-            WHERE t.id = $1
-        """
+        if api_key_id:
+            # API key authentication - filter by api_key_id
+            query = """
+                SELECT t.*, s.name as server_name, s.url as server_url
+                FROM mcp_client.tools t
+                JOIN mcp_client.servers s ON t.server_id = s.id
+                WHERE t.id = $1 AND t.api_key_id = $2
+            """
+            result = await self.db.fetch_one(query, tool_id, api_key_id)
+        elif user_id and project_id:
+            # User authentication - filter by project_id via cross-schema join
+            query = """
+                SELECT t.*, s.name as server_name, s.url as server_url
+                FROM mcp_client.tools t
+                JOIN mcp_client.servers s ON t.server_id = s.id
+                JOIN llmring_api.api_keys k ON k.id::text = t.api_key_id
+                WHERE t.id = $1 AND k.project_id = $2
+            """
+            result = await self.db.fetch_one(query, tool_id, project_id)
+        else:
+            raise ValueError("Must provide either api_key_id or (user_id + project_id)")
 
-        result = await self.db.fetch_one(query, tool_id)
         if not result:
             return None
 
@@ -576,61 +603,112 @@ class MCPService:
         self,
         server_id: Optional[UUID] = None,
         api_key_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        project_id: Optional[str] = None,
         is_active: bool = True,
     ) -> List[Dict[str, Any]]:
         """List MCP resources.
 
+        Accepts either:
+        - api_key_id: for programmatic API key authentication
+        - user_id + project_id: for browser/JWT authentication
+
         Args:
             server_id: Filter by server ID
-            api_key_id: Filter by project ID
+            api_key_id: Filter by API key ID (API key auth)
+            user_id: User ID for JWT authentication
+            project_id: Project ID for JWT authentication
             is_active: Filter by active status
 
         Returns:
             List of resources
         """
-        query = """
-            SELECT r.*, s.name as server_name, s.url as server_url
-            FROM mcp_client.resources r
-            JOIN mcp_client.servers s ON r.server_id = s.id
-            WHERE r.is_active = $1
-        """
-        params = [is_active]
-        param_count = 1
+        if api_key_id:
+            # API key authentication
+            query = """
+                SELECT r.*, s.name as server_name, s.url as server_url
+                FROM mcp_client.resources r
+                JOIN mcp_client.servers s ON r.server_id = s.id
+                WHERE r.is_active = $1 AND r.api_key_id = $2
+            """
+            params = [is_active, api_key_id]
+            param_count = 2
 
-        if server_id is not None:
-            param_count += 1
-            query += f" AND r.server_id = ${param_count}"
-            params.append(server_id)
+            if server_id is not None:
+                param_count += 1
+                query += f" AND r.server_id = ${param_count}"
+                params.append(server_id)
 
-        if api_key_id is not None:
-            param_count += 1
-            query += f" AND r.api_key_id = ${param_count}"
-            params.append(api_key_id)
+            query += " ORDER BY r.uri"
+            results = await self.db.fetch_all(query, *params)
+        elif user_id and project_id:
+            # User authentication - filter by project_id via cross-schema join
+            query = """
+                SELECT r.*, s.name as server_name, s.url as server_url
+                FROM mcp_client.resources r
+                JOIN mcp_client.servers s ON r.server_id = s.id
+                JOIN llmring_api.api_keys k ON k.id::text = r.api_key_id
+                WHERE r.is_active = $1 AND k.project_id = $2
+            """
+            params = [is_active, project_id]
+            param_count = 2
+
+            if server_id is not None:
+                param_count += 1
+                query += f" AND r.server_id = ${param_count}"
+                params.append(server_id)
+
+            query += " ORDER BY r.uri"
+            results = await self.db.fetch_all(query, *params)
         else:
-            query += " AND r.api_key_id IS NULL"
+            raise ValueError("Must provide either api_key_id or (user_id + project_id)")
 
-        query += " ORDER BY r.uri"
-
-        results = await self.db.fetch_all(query, *params)
         return [dict(r) for r in results]
 
-    async def get_resource(self, resource_id: UUID) -> Optional[Dict[str, Any]]:
+    async def get_resource(
+        self,
+        resource_id: UUID,
+        api_key_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
         """Get an MCP resource by ID.
+
+        Accepts either:
+        - api_key_id: for programmatic API key authentication
+        - user_id + project_id: for browser/JWT authentication
 
         Args:
             resource_id: Resource ID
+            api_key_id: API key ID for filtering (API key auth)
+            user_id: User ID for JWT authentication
+            project_id: Project ID for JWT authentication
 
         Returns:
             Resource data or None
         """
-        query = """
-            SELECT r.*, s.name as server_name, s.url as server_url
-            FROM mcp_client.resources r
-            JOIN mcp_client.servers s ON r.server_id = s.id
-            WHERE r.id = $1
-        """
+        if api_key_id:
+            # API key authentication - filter by api_key_id
+            query = """
+                SELECT r.*, s.name as server_name, s.url as server_url
+                FROM mcp_client.resources r
+                JOIN mcp_client.servers s ON r.server_id = s.id
+                WHERE r.id = $1 AND r.api_key_id = $2
+            """
+            result = await self.db.fetch_one(query, resource_id, api_key_id)
+        elif user_id and project_id:
+            # User authentication - filter by project_id via cross-schema join
+            query = """
+                SELECT r.*, s.name as server_name, s.url as server_url
+                FROM mcp_client.resources r
+                JOIN mcp_client.servers s ON r.server_id = s.id
+                JOIN llmring_api.api_keys k ON k.id::text = r.api_key_id
+                WHERE r.id = $1 AND k.project_id = $2
+            """
+            result = await self.db.fetch_one(query, resource_id, project_id)
+        else:
+            raise ValueError("Must provide either api_key_id or (user_id + project_id)")
 
-        result = await self.db.fetch_one(query, resource_id)
         return dict(result) if result else None
 
     # ============= Prompt Management =============
@@ -639,59 +717,110 @@ class MCPService:
         self,
         server_id: Optional[UUID] = None,
         api_key_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        project_id: Optional[str] = None,
         is_active: bool = True,
     ) -> List[Dict[str, Any]]:
         """List MCP prompts.
 
+        Accepts either:
+        - api_key_id: for programmatic API key authentication
+        - user_id + project_id: for browser/JWT authentication
+
         Args:
             server_id: Filter by server ID
-            api_key_id: Filter by project ID
+            api_key_id: Filter by API key ID (API key auth)
+            user_id: User ID for JWT authentication
+            project_id: Project ID for JWT authentication
             is_active: Filter by active status
 
         Returns:
             List of prompts
         """
-        query = """
-            SELECT p.*, s.name as server_name, s.url as server_url
-            FROM mcp_client.prompts p
-            JOIN mcp_client.servers s ON p.server_id = s.id
-            WHERE p.is_active = $1
-        """
-        params = [is_active]
-        param_count = 1
+        if api_key_id:
+            # API key authentication
+            query = """
+                SELECT p.*, s.name as server_name, s.url as server_url
+                FROM mcp_client.prompts p
+                JOIN mcp_client.servers s ON p.server_id = s.id
+                WHERE p.is_active = $1 AND p.api_key_id = $2
+            """
+            params = [is_active, api_key_id]
+            param_count = 2
 
-        if server_id is not None:
-            param_count += 1
-            query += f" AND p.server_id = ${param_count}"
-            params.append(server_id)
+            if server_id is not None:
+                param_count += 1
+                query += f" AND p.server_id = ${param_count}"
+                params.append(server_id)
 
-        if api_key_id is not None:
-            param_count += 1
-            query += f" AND p.api_key_id = ${param_count}"
-            params.append(api_key_id)
+            query += " ORDER BY p.name"
+            results = await self.db.fetch_all(query, *params)
+        elif user_id and project_id:
+            # User authentication - filter by project_id via cross-schema join
+            query = """
+                SELECT p.*, s.name as server_name, s.url as server_url
+                FROM mcp_client.prompts p
+                JOIN mcp_client.servers s ON p.server_id = s.id
+                JOIN llmring_api.api_keys k ON k.id::text = p.api_key_id
+                WHERE p.is_active = $1 AND k.project_id = $2
+            """
+            params = [is_active, project_id]
+            param_count = 2
+
+            if server_id is not None:
+                param_count += 1
+                query += f" AND p.server_id = ${param_count}"
+                params.append(server_id)
+
+            query += " ORDER BY p.name"
+            results = await self.db.fetch_all(query, *params)
         else:
-            query += " AND p.api_key_id IS NULL"
+            raise ValueError("Must provide either api_key_id or (user_id + project_id)")
 
-        query += " ORDER BY p.name"
-
-        results = await self.db.fetch_all(query, *params)
         return [dict(r) for r in results]
 
-    async def get_prompt(self, prompt_id: UUID) -> Optional[Dict[str, Any]]:
+    async def get_prompt(
+        self,
+        prompt_id: UUID,
+        api_key_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
         """Get an MCP prompt by ID.
+
+        Accepts either:
+        - api_key_id: for programmatic API key authentication
+        - user_id + project_id: for browser/JWT authentication
 
         Args:
             prompt_id: Prompt ID
+            api_key_id: API key ID for filtering (API key auth)
+            user_id: User ID for JWT authentication
+            project_id: Project ID for JWT authentication
 
         Returns:
             Prompt data or None
         """
-        query = """
-            SELECT p.*, s.name as server_name, s.url as server_url
-            FROM mcp_client.prompts p
-            JOIN mcp_client.servers s ON p.server_id = s.id
-            WHERE p.id = $1
-        """
+        if api_key_id:
+            # API key authentication - filter by api_key_id
+            query = """
+                SELECT p.*, s.name as server_name, s.url as server_url
+                FROM mcp_client.prompts p
+                JOIN mcp_client.servers s ON p.server_id = s.id
+                WHERE p.id = $1 AND p.api_key_id = $2
+            """
+            result = await self.db.fetch_one(query, prompt_id, api_key_id)
+        elif user_id and project_id:
+            # User authentication - filter by project_id via cross-schema join
+            query = """
+                SELECT p.*, s.name as server_name, s.url as server_url
+                FROM mcp_client.prompts p
+                JOIN mcp_client.servers s ON p.server_id = s.id
+                JOIN llmring_api.api_keys k ON k.id::text = p.api_key_id
+                WHERE p.id = $1 AND k.project_id = $2
+            """
+            result = await self.db.fetch_one(query, prompt_id, project_id)
+        else:
+            raise ValueError("Must provide either api_key_id or (user_id + project_id)")
 
-        result = await self.db.fetch_one(query, prompt_id)
         return dict(result) if result else None
