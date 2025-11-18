@@ -28,6 +28,9 @@ class ConversationTemplateCreate(ConversationTemplateBase):
     api_key_id: Optional[str] = Field(
         None, max_length=255, description="API key that owns this template"
     )
+    project_id: Optional[str] = Field(
+        None, description="Project that owns this template for user-auth flows"
+    )
     created_by: str = Field(..., max_length=255, description="User who created this template")
 
 
@@ -49,6 +52,7 @@ class ConversationTemplate(ConversationTemplateBase):
 
     id: UUID
     api_key_id: Optional[str]  # NULL for global templates
+    project_id: Optional[str] = None
     created_by: str
     is_active: bool = True
     usage_count: int = 0

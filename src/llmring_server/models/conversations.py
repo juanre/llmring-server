@@ -26,6 +26,9 @@ class ConversationCreate(ConversationBase):
     api_key_id: Optional[str] = Field(
         None, description="API key that owns this conversation (NULL for local usage)"
     )
+    project_id: Optional[str] = Field(
+        None, description="Project that owns this conversation (user/JWT mode)"
+    )
 
 
 class ConversationUpdate(BaseModel):
@@ -43,6 +46,7 @@ class Conversation(ConversationBase):
 
     id: UUID
     api_key_id: Optional[str]  # NULL for local usage
+    project_id: Optional[str] = None
     message_count: int = 0
     total_input_tokens: int = 0
     total_output_tokens: int = 0

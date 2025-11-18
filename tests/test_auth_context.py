@@ -3,7 +3,7 @@
 
 import pytest
 import pytest_asyncio
-from fastapi import Request
+from fastapi import HTTPException, Request
 
 from llmring_server.dependencies import get_auth_context
 
@@ -16,11 +16,45 @@ async def setup_api_keys_table(llmring_db):
     await llmring_db.execute(
         """
         CREATE TABLE IF NOT EXISTS llmring_api.api_keys (
-            id UUID PRIMARY KEY,
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             project_id UUID NOT NULL,
-            name VARCHAR(255) NOT NULL,
-            key_hash VARCHAR(255) NOT NULL
+            name VARCHAR(255),
+            key_hash VARCHAR(255) NOT NULL,
+            user_id UUID,
+            display_suffix VARCHAR(10),
+            tier VARCHAR(20),
+            metadata JSONB DEFAULT '{}'::jsonb,
+            is_active BOOLEAN DEFAULT true,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         )
+        """
+    )
+    await llmring_db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS llmring_api.projects (
+            id UUID PRIMARY KEY,
+            user_id UUID NOT NULL,
+            name VARCHAR(255),
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+        """
+    )
+    await llmring_db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS llmring_api.project_members (
+            project_id UUID REFERENCES llmring_api.projects(id) ON DELETE CASCADE,
+            user_id UUID NOT NULL,
+            PRIMARY KEY (project_id, user_id)
+        )
+        """
+    )
+    await llmring_db.execute(
+        """
+        INSERT INTO llmring_api.projects (id, user_id, name)
+        VALUES
+            ('10000000-0000-0000-0000-000000000001'::uuid, '20000000-0000-0000-0000-000000000001'::uuid, 'Project One'),
+            ('10000000-0000-0000-0000-000000000002'::uuid, '20000000-0000-0000-0000-000000000002'::uuid, 'Project Two')
+        ON CONFLICT (id) DO NOTHING
         """
     )
     # Create conversations table for conversation tests
@@ -88,12 +122,78 @@ async def test_no_auth_context_raises_401():
 
     request = MockRequest()
 
-    from fastapi import HTTPException
-
     with pytest.raises(HTTPException) as exc_info:
         await get_auth_context(request)
 
     assert exc_info.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_user_auth_membership_validation(setup_api_keys_table):
+    """Ensure user authentication requires verified project membership."""
+
+    db = setup_api_keys_table
+
+    class MockState:
+        def __init__(self, db):
+            self.db = db
+            self.enforce_user_project_membership = True
+
+    class MockApp:
+        def __init__(self, db):
+            self.state = MockState(db)
+
+    class MockRequest:
+        def __init__(self, headers, db):
+            self.headers = headers
+            self.app = MockApp(db)
+
+    # Valid membership (user owns project)
+    request = MockRequest(
+        {
+            "x-user-id": "20000000-0000-0000-0000-000000000001",
+            "x-project-id": "10000000-0000-0000-0000-000000000001",
+        },
+        db,
+    )
+    context = await get_auth_context(request)
+    assert context["type"] == "user"
+
+    # Same user requesting different project they do not own
+    unauthorized_request = MockRequest(
+        {
+            "x-user-id": "20000000-0000-0000-0000-000000000001",
+            "x-project-id": "10000000-0000-0000-0000-000000000002",
+        },
+        db,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_auth_context(unauthorized_request)
+
+    assert exc_info.value.status_code == 404
+
+    # Add user 2 as MEMBER (not owner) of project 1
+    await db.execute(
+        """
+        INSERT INTO llmring_api.project_members (project_id, user_id)
+        VALUES ('10000000-0000-0000-0000-000000000001'::uuid,
+                '20000000-0000-0000-0000-000000000002'::uuid)
+        """
+    )
+
+    # User 2 should now have access to project 1 as a member
+    member_request = MockRequest(
+        {
+            "x-user-id": "20000000-0000-0000-0000-000000000002",
+            "x-project-id": "10000000-0000-0000-0000-000000000001",
+        },
+        db,
+    )
+    context = await get_auth_context(member_request)
+    assert context["type"] == "user"
+    assert context["user_id"] == "20000000-0000-0000-0000-000000000002"
+    assert context["project_id"] == "10000000-0000-0000-0000-000000000001"
 
 
 @pytest.mark.asyncio
@@ -120,16 +220,16 @@ async def test_mcp_list_servers_with_user_auth(test_app, setup_api_keys_table):
     # Create server for project 1
     await llmring_db.execute(
         """
-        INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id)
-        VALUES ('Server 1', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001')
+        INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id, project_id)
+        VALUES ('Server 1', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001')
         """
     )
 
     # Create server for project 2
     await llmring_db.execute(
         """
-        INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id)
-        VALUES ('Server 2', 'http://server2', 'http', '00000000-0000-0000-0000-000000000002')
+        INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id, project_id)
+        VALUES ('Server 2', 'http://server2', 'http', '00000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002')
         """
     )
 
@@ -183,8 +283,8 @@ async def test_mcp_get_server_authorization_bypass(test_app, setup_api_keys_tabl
     # Create server for project 1
     result = await llmring_db.fetch_one(
         """
-        INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id)
-        VALUES ('Project 1 Server', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001')
+        INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id, project_id)
+        VALUES ('Project 1 Server', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001')
         RETURNING id
         """
     )
@@ -225,8 +325,8 @@ async def test_mcp_update_server_authorization_bypass(test_app, setup_api_keys_t
     # Create server for project 1
     result = await llmring_db.fetch_one(
         """
-        INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id)
-        VALUES ('Original Name', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001')
+        INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id, project_id)
+        VALUES ('Original Name', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001')
         RETURNING id
         """
     )
@@ -274,8 +374,8 @@ async def test_mcp_delete_server_authorization_bypass(test_app, setup_api_keys_t
     # Create server for project 1
     result = await llmring_db.fetch_one(
         """
-        INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id)
-        VALUES ('Important Server', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001')
+        INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id, project_id)
+        VALUES ('Important Server', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001')
         RETURNING id
         """
     )
@@ -322,8 +422,8 @@ async def test_mcp_refresh_server_capabilities_authorization_bypass(test_app, se
     # Create server for project 1
     result = await llmring_db.fetch_one(
         """
-        INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id)
-        VALUES ('Server 1', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001')
+        INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id, project_id)
+        VALUES ('Server 1', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001')
         RETURNING id
         """
     )
@@ -369,16 +469,16 @@ async def test_conversation_list_with_user_auth(test_app, setup_api_keys_table):
     # Create conversation for project 1
     await llmring_db.execute(
         """
-        INSERT INTO {{tables.conversations}} (api_key_id, title, model_alias)
-        VALUES ('00000000-0000-0000-0000-000000000001', 'Project 1 Conversation', 'default')
+        INSERT INTO {{tables.conversations}} (api_key_id, project_id, title, model_alias)
+        VALUES ('00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'Project 1 Conversation', 'default')
         """
     )
 
     # Create conversation for project 2
     await llmring_db.execute(
         """
-        INSERT INTO {{tables.conversations}} (api_key_id, title, model_alias)
-        VALUES ('00000000-0000-0000-0000-000000000002', 'Project 2 Conversation', 'default')
+        INSERT INTO {{tables.conversations}} (api_key_id, project_id, title, model_alias)
+        VALUES ('00000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002', 'Project 2 Conversation', 'default')
         """
     )
 
@@ -431,8 +531,8 @@ async def test_conversation_get_authorization_bypass(test_app, setup_api_keys_ta
     # Create conversation for project 1
     result = await llmring_db.fetch_one(
         """
-        INSERT INTO {{tables.conversations}} (api_key_id, title, model_alias)
-        VALUES ('00000000-0000-0000-0000-000000000001', 'Private Conversation', 'default')
+        INSERT INTO {{tables.conversations}} (api_key_id, project_id, title, model_alias)
+        VALUES ('00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'Private Conversation', 'default')
         RETURNING id
         """
     )
@@ -472,8 +572,8 @@ async def test_conversation_update_authorization_bypass(test_app, setup_api_keys
     # Create conversation for project 1
     result = await llmring_db.fetch_one(
         """
-        INSERT INTO {{tables.conversations}} (api_key_id, title, model_alias)
-        VALUES ('00000000-0000-0000-0000-000000000001', 'Original Title', 'default')
+        INSERT INTO {{tables.conversations}} (api_key_id, project_id, title, model_alias)
+        VALUES ('00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'Original Title', 'default')
         RETURNING id
         """
     )
@@ -520,8 +620,8 @@ async def test_conversation_messages_authorization_bypass(test_app, setup_api_ke
     # Create conversation for project 1
     result = await llmring_db.fetch_one(
         """
-        INSERT INTO {{tables.conversations}} (api_key_id, title, model_alias)
-        VALUES ('00000000-0000-0000-0000-000000000001', 'Private Conversation', 'default')
+        INSERT INTO {{tables.conversations}} (api_key_id, project_id, title, model_alias)
+        VALUES ('00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'Private Conversation', 'default')
         RETURNING id
         """
     )
@@ -606,8 +706,8 @@ async def test_mcp_tool_get_authorization_bypass(test_app, setup_api_keys_table)
     # Create server for project 1
     server_result = await llmring_db.fetch_one(
         """
-        INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id)
-        VALUES ('Server 1', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001')
+        INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id, project_id)
+        VALUES ('Server 1', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001')
         RETURNING id
         """
     )
@@ -615,8 +715,8 @@ async def test_mcp_tool_get_authorization_bypass(test_app, setup_api_keys_table)
     # Create tool for project 1
     tool_result = await llmring_db.fetch_one(
         """
-        INSERT INTO mcp_client.tools (server_id, name, description, input_schema, api_key_id)
-        VALUES ($1, 'Private Tool', 'Secret tool', '{}', '00000000-0000-0000-0000-000000000001')
+        INSERT INTO mcp_client.tools (server_id, name, description, input_schema, api_key_id, project_id)
+        VALUES ($1, 'Private Tool', 'Secret tool', '{}', '00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001')
         RETURNING id
         """,
         server_result["id"],
@@ -657,8 +757,8 @@ async def test_mcp_resource_get_authorization_bypass(test_app, setup_api_keys_ta
     # Create server for project 1
     server_result = await llmring_db.fetch_one(
         """
-        INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id)
-        VALUES ('Server 1', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001')
+        INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id, project_id)
+        VALUES ('Server 1', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001')
         RETURNING id
         """
     )
@@ -666,8 +766,8 @@ async def test_mcp_resource_get_authorization_bypass(test_app, setup_api_keys_ta
     # Create resource for project 1
     resource_result = await llmring_db.fetch_one(
         """
-        INSERT INTO mcp_client.resources (server_id, uri, name, description, api_key_id)
-        VALUES ($1, 'file://secret.txt', 'Secret Resource', 'Private data', '00000000-0000-0000-0000-000000000001')
+        INSERT INTO mcp_client.resources (server_id, uri, name, description, api_key_id, project_id)
+        VALUES ($1, 'file://secret.txt', 'Secret Resource', 'Private data', '00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001')
         RETURNING id
         """,
         server_result["id"],
@@ -708,8 +808,8 @@ async def test_mcp_prompt_get_authorization_bypass(test_app, setup_api_keys_tabl
     # Create server for project 1
     server_result = await llmring_db.fetch_one(
         """
-        INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id)
-        VALUES ('Server 1', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001')
+        INSERT INTO mcp_client.servers (name, url, transport_type, api_key_id, project_id)
+        VALUES ('Server 1', 'http://server1', 'http', '00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001')
         RETURNING id
         """
     )
@@ -717,8 +817,8 @@ async def test_mcp_prompt_get_authorization_bypass(test_app, setup_api_keys_tabl
     # Create prompt for project 1
     prompt_result = await llmring_db.fetch_one(
         """
-        INSERT INTO mcp_client.prompts (server_id, name, description, api_key_id)
-        VALUES ($1, 'Secret Prompt', 'Private prompt', '00000000-0000-0000-0000-000000000001')
+        INSERT INTO mcp_client.prompts (server_id, name, description, api_key_id, project_id)
+        VALUES ($1, 'Secret Prompt', 'Private prompt', '00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001')
         RETURNING id
         """,
         server_result["id"],
@@ -737,3 +837,77 @@ async def test_mcp_prompt_get_authorization_bypass(test_app, setup_api_keys_tabl
     assert (
         response.status_code == 404
     ), "Authorization bypass: user can access prompt from different project"
+
+
+@pytest.mark.asyncio
+async def test_mcp_create_server_without_api_key_user_auth(test_app, setup_api_keys_table):
+    """User auth can create an MCP server without any API keys."""
+    db = setup_api_keys_table
+
+    # New project owned by user3 with no API keys
+    await db.execute(
+        """
+        INSERT INTO llmring_api.projects (id, user_id, name)
+        VALUES ('30000000-0000-0000-0000-000000000003'::uuid,
+                '30000000-0000-0000-0000-000000000003'::uuid,
+                'Project Three')
+        """
+    )
+
+    response = await test_app.post(
+        "/api/v1/mcp/servers",
+        json={"name": "New Server", "url": "http://example.com", "transport_type": "http"},
+        headers={
+            "X-User-ID": "30000000-0000-0000-0000-000000000003",
+            "X-Project-ID": "30000000-0000-0000-0000-000000000003",
+        },
+    )
+
+    assert response.status_code == 200
+    server = response.json()
+
+    # No API keys should exist, and server should be scoped to the project
+    key_row = await db.fetch_one(
+        "SELECT id::text FROM llmring_api.api_keys WHERE project_id = $1",
+        "30000000-0000-0000-0000-000000000003",
+    )
+    assert key_row is None
+    assert server.get("project_id") == "30000000-0000-0000-0000-000000000003"
+    assert server.get("api_key_id") is None
+
+
+@pytest.mark.asyncio
+async def test_conversation_create_project_scoped_user_auth(test_app, setup_api_keys_table):
+    """User auth can create conversations scoped by project_id without API keys."""
+    db = setup_api_keys_table
+
+    # New project owned by user4 with no API keys
+    await db.execute(
+        """
+        INSERT INTO llmring_api.projects (id, user_id, name)
+        VALUES ('40000000-0000-0000-0000-000000000004'::uuid,
+                '40000000-0000-0000-0000-000000000004'::uuid,
+                'Project Four')
+        """
+    )
+
+    response = await test_app.post(
+        "/api/v1/conversations/",
+        json={"title": "Hello"},
+        headers={
+            "X-User-ID": "40000000-0000-0000-0000-000000000004",
+            "X-Project-ID": "40000000-0000-0000-0000-000000000004",
+        },
+    )
+
+    assert response.status_code == 200
+    conversation = response.json()
+
+    # Confirm no key was created and conversation is project-scoped
+    key_row = await db.fetch_one(
+        "SELECT id::text FROM llmring_api.api_keys WHERE project_id = $1",
+        "40000000-0000-0000-0000-000000000004",
+    )
+    assert key_row is None
+    assert conversation["project_id"] == "40000000-0000-0000-0000-000000000004"
+    assert conversation.get("api_key_id") is None

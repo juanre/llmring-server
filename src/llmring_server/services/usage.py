@@ -58,13 +58,14 @@ class UsageService:
 
     async def log_usage(
         self,
-        api_key_id: str,
+        api_key_id: Optional[str],
         log: UsageLogRequest,
         cost: float,
         timestamp: datetime,
         conversation_id: Optional[UUID] = None,
         messages: Optional[List[Dict]] = None,
         logging_level: Optional[MessageLoggingLevel] = None,
+        project_id: Optional[str] = None,
     ) -> Dict:
         """Log usage and optionally store conversation messages.
 
@@ -77,15 +78,16 @@ class UsageService:
         # Insert usage log with optional conversation_id
         query = """
             INSERT INTO {{tables.usage_logs}} (
-                api_key_id, model, provider, input_tokens, output_tokens,
+                api_key_id, project_id, model, provider, input_tokens, output_tokens,
                 cached_input_tokens, cost, latency_ms, origin, id_at_origin,
                 created_at, metadata, alias, profile, conversation_id
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
             RETURNING id
         """
         result = await self.db.fetch_one(
             query,
             api_key_id,
+            project_id,
             log.model,
             log.provider,
             log.input_tokens,
@@ -140,7 +142,8 @@ class UsageService:
 
     async def get_stats(
         self,
-        api_key_id: str,
+        api_key_id: Optional[str] = None,
+        project_id: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         group_by: str = "day",
@@ -166,7 +169,10 @@ class UsageService:
         if start_dt > end_dt:
             start_dt = end_dt
 
-        summary_query = """
+        filter_column = "api_key_id" if api_key_id else "project_id"
+        filter_value = api_key_id or project_id
+
+        summary_query = f"""
             SELECT
                 COUNT(*) as total_requests,
                 COALESCE(SUM(cost), 0) as total_cost,
@@ -174,11 +180,11 @@ class UsageService:
                 COUNT(DISTINCT model) as unique_models,
                 COUNT(DISTINCT origin) as unique_origins
             FROM {{tables.usage_logs}}
-            WHERE api_key_id = $1
+            WHERE {filter_column} = $1
                 AND created_at >= $2::timestamptz
                 AND created_at <= $3::timestamptz
         """
-        summary_result = await self.db.fetch_one(summary_query, api_key_id, start_dt, end_dt)
+        summary_result = await self.db.fetch_one(summary_query, filter_value, start_dt, end_dt)
         # Guard against None result rows for mypy
         tr = (
             int(summary_result["total_requests"])
@@ -213,20 +219,20 @@ class UsageService:
             unique_origins=uo,
         )
 
-        daily_query = """
+        daily_query = f"""
             SELECT
                 DATE(created_at) as date,
                 COUNT(*) as requests,
                 COALESCE(SUM(cost), 0) as cost,
                 model as top_model
             FROM {{tables.usage_logs}}
-            WHERE api_key_id = $1
+            WHERE {filter_column} = $1
                 AND created_at >= $2::timestamptz
                 AND created_at <= $3::timestamptz
             GROUP BY DATE(created_at), model
             ORDER BY DATE(created_at) DESC, COUNT(*) DESC
         """
-        daily_results = await self.db.fetch_all(daily_query, api_key_id, start_dt, end_dt)
+        daily_results = await self.db.fetch_all(daily_query, filter_value, start_dt, end_dt)
         by_day = []
         current_date = None
         day_data = None
@@ -244,7 +250,7 @@ class UsageService:
         if day_data:
             by_day.append(day_data)
 
-        model_query = """
+        model_query = f"""
             SELECT
                 model,
                 COUNT(*) as requests,
@@ -252,12 +258,12 @@ class UsageService:
                 COALESCE(SUM(input_tokens), 0) as input_tokens,
                 COALESCE(SUM(output_tokens), 0) as output_tokens
             FROM {{tables.usage_logs}}
-            WHERE api_key_id = $1
+            WHERE {filter_column} = $1
                 AND created_at >= $2::timestamptz
                 AND created_at <= $3::timestamptz
             GROUP BY model
         """
-        model_results = await self.db.fetch_all(model_query, api_key_id, start_dt, end_dt)
+        model_results = await self.db.fetch_all(model_query, filter_value, start_dt, end_dt)
         by_model = {}
         for row in model_results:
             by_model[row["model"]] = ModelUsage(
@@ -267,19 +273,19 @@ class UsageService:
                 output_tokens=row["output_tokens"],
             )
 
-        origin_query = """
+        origin_query = f"""
             SELECT
                 origin,
                 COUNT(*) as requests,
                 COALESCE(SUM(cost), 0) as cost
             FROM {{tables.usage_logs}}
-            WHERE api_key_id = $1
+            WHERE {filter_column} = $1
                 AND created_at >= $2::timestamptz
                 AND created_at <= $3::timestamptz
                 AND origin IS NOT NULL
             GROUP BY origin
         """
-        origin_results = await self.db.fetch_all(origin_query, api_key_id, start_dt, end_dt)
+        origin_results = await self.db.fetch_all(origin_query, filter_value, start_dt, end_dt)
         by_origin = {}
         for row in origin_results:
             by_origin[row["origin"]] = {
@@ -287,7 +293,7 @@ class UsageService:
                 "cost": float(row["cost"]),
             }
 
-        alias_query = """
+        alias_query = f"""
             SELECT
                 alias,
                 COUNT(*) as requests,
@@ -295,13 +301,13 @@ class UsageService:
                 COALESCE(SUM(input_tokens), 0) as input_tokens,
                 COALESCE(SUM(output_tokens), 0) as output_tokens
             FROM {{tables.usage_logs}}
-            WHERE api_key_id = $1
+            WHERE {filter_column} = $1
                 AND created_at >= $2::timestamptz
                 AND created_at <= $3::timestamptz
                 AND alias IS NOT NULL
             GROUP BY alias
         """
-        alias_results = await self.db.fetch_all(alias_query, api_key_id, start_dt, end_dt)
+        alias_results = await self.db.fetch_all(alias_query, filter_value, start_dt, end_dt)
         by_alias = {}
         for row in alias_results:
             by_alias[row["alias"]] = ModelUsage(
@@ -321,7 +327,8 @@ class UsageService:
 
     async def get_logs(
         self,
-        api_key_id: str,
+        api_key_id: Optional[str] = None,
+        project_id: Optional[str] = None,
         limit: int = 50,
         offset: int = 0,
         start_date: Optional[str] = None,
@@ -330,6 +337,8 @@ class UsageService:
         model: Optional[str] = None,
         origin: Optional[str] = None,
     ) -> List[Dict[str, object]]:
+        if not (api_key_id or project_id):
+            raise ValueError("Must provide api_key_id or project_id")
         limit = max(1, min(limit, 500))
         offset = max(0, offset)
 
@@ -344,8 +353,11 @@ class UsageService:
             else end_dt - timedelta(days=30)
         )
 
-        conditions = ["api_key_id = $1"]
-        params: List[object] = [api_key_id]
+        filter_column = "api_key_id" if api_key_id else "project_id"
+        filter_value = api_key_id or project_id
+
+        conditions = [f"{filter_column} = $1"]
+        params: List[object] = [filter_value]
         idx = 2
 
         if start_dt:

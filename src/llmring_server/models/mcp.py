@@ -29,6 +29,7 @@ class MCPServerCreate(MCPServerBase):
     """Model for creating an MCP server."""
 
     api_key_id: Optional[str] = None
+    project_id: Optional[str] = None
 
 
 class MCPServerUpdate(BaseModel):
@@ -46,6 +47,7 @@ class MCPServer(MCPServerBase):
 
     id: UUID
     api_key_id: Optional[str] = None
+    project_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -67,6 +69,7 @@ class MCPToolCreate(MCPToolBase):
 
     server_id: UUID = Field(..., description="Associated MCP server ID")
     api_key_id: Optional[str] = None
+    project_id: Optional[str] = None
 
 
 class MCPToolUpdate(BaseModel):
@@ -83,6 +86,7 @@ class MCPTool(MCPToolBase):
     id: UUID
     server_id: UUID
     api_key_id: Optional[str] = None
+    project_id: Optional[str] = None
     created_at: datetime
 
 
@@ -110,6 +114,7 @@ class MCPResourceCreate(MCPResourceBase):
 
     server_id: UUID = Field(..., description="Associated MCP server ID")
     api_key_id: Optional[str] = None
+    project_id: Optional[str] = None
 
 
 class MCPResourceUpdate(BaseModel):
@@ -127,6 +132,7 @@ class MCPResource(MCPResourceBase):
     id: UUID
     server_id: UUID
     api_key_id: Optional[str] = None
+    project_id: Optional[str] = None
     created_at: datetime
 
 
@@ -147,6 +153,7 @@ class MCPPromptCreate(MCPPromptBase):
 
     server_id: UUID = Field(..., description="Associated MCP server ID")
     api_key_id: Optional[str] = None
+    project_id: Optional[str] = None
 
 
 class MCPPromptUpdate(BaseModel):
@@ -163,6 +170,7 @@ class MCPPrompt(MCPPromptBase):
     id: UUID
     server_id: UUID
     api_key_id: Optional[str] = None
+    project_id: Optional[str] = None
     created_at: datetime
 
 

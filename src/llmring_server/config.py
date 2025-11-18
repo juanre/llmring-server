@@ -61,8 +61,14 @@ class Settings(BaseSettings):
 
     # API Configuration (prefix not used at core level; routes include their own prefixes)
     cors_origins: list[str] = Field(
-        default=["http://localhost:5173", "http://localhost:5174", "*"],
+        default=["http://localhost:5173", "http://localhost:5174"],
         validation_alias=AliasChoices("LLMRING_CORS_ORIGINS"),
+    )
+
+    api_key_validation_mode: str = Field(
+        default="bridge",
+        validation_alias=AliasChoices("LLMRING_API_KEY_VALIDATION_MODE"),
+        description="API key validation strategy: bridge (trust upstream), strict (validate hash against DB)",
     )
 
     # Registry configuration

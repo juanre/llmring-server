@@ -36,10 +36,10 @@ class TemplateService:
 
         query = """
         INSERT INTO {{tables.conversation_templates}} (
-            id, api_key_id, name, description, system_prompt,
+            id, api_key_id, project_id, name, description, system_prompt,
             model, temperature, max_tokens, tool_config, created_by,
             is_active, usage_count, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING *
         """
 
@@ -48,6 +48,7 @@ class TemplateService:
                 query,
                 template_id,
                 template_data.api_key_id,
+                template_data.project_id,
                 template_data.name,
                 template_data.description,
                 template_data.system_prompt,
@@ -91,14 +92,13 @@ class TemplateService:
             AND (api_key_id = $2 OR api_key_id IS NULL)
             """
             params = [template_id, api_key_id]
-        elif user_id and project_id:
-            # User authentication - filter by project_id via cross-schema join
+        elif project_id:
+            # User authentication - filter by project_id
             query = """
             SELECT t.*
             FROM {{tables.conversation_templates}} t
-            LEFT JOIN llmring_api.api_keys k ON k.id::text = t.api_key_id
             WHERE t.id = $1 AND t.is_active = true
-            AND (k.project_id = $2 OR t.api_key_id IS NULL)
+            AND (t.project_id = $2 OR t.api_key_id IS NULL)
             """
             params = [template_id, project_id]
         else:
@@ -137,14 +137,13 @@ class TemplateService:
             AND (api_key_id = $1 OR api_key_id IS NULL)
             """
             params = [api_key_id]
-        elif user_id and project_id:
-            # User authentication - filter by project_id via cross-schema join
+        elif project_id:
+            # User authentication - filter by project_id
             query = """
             SELECT t.*
             FROM {{tables.conversation_templates}} t
-            LEFT JOIN llmring_api.api_keys k ON k.id::text = t.api_key_id
             WHERE t.is_active = true
-            AND (k.project_id = $1 OR t.api_key_id IS NULL)
+            AND (t.project_id = $1 OR t.api_key_id IS NULL)
             """
             params = [project_id]
         else:
@@ -313,15 +312,14 @@ class TemplateService:
             AND (api_key_id = $1 OR api_key_id IS NULL)
             """
             params = [api_key_id]
-        elif user_id and project_id:
-            # User authentication - filter by project_id via cross-schema join
+        elif project_id:
+            # User authentication - filter by project_id
             query = """
             SELECT t.id as template_id, t.name as template_name, t.usage_count,
                    t.last_used_at, t.created_at
             FROM {{tables.conversation_templates}} t
-            LEFT JOIN llmring_api.api_keys k ON k.id::text = t.api_key_id
             WHERE t.is_active = true
-            AND (k.project_id = $1 OR t.api_key_id IS NULL)
+            AND (t.project_id = $1 OR t.api_key_id IS NULL)
             """
             params = [project_id]
         else:

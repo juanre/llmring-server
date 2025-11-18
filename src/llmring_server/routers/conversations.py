@@ -41,18 +41,10 @@ async def create_conversation(
 
     # For creation, we need an api_key_id to associate with the conversation
     # API key auth provides it directly
-    # User auth requires API key management (handled by llmring-api layer)
     if auth_context["type"] == "api_key":
-        api_key_id = auth_context["api_key_id"]
+        conversation_data.api_key_id = auth_context["api_key_id"]
     else:
-        # User auth: API key should be passed in request or managed by caller
-        # For now, user auth is supported but requires explicit api_key handling
-        raise HTTPException(
-            status_code=501,
-            detail="Creating conversations with user auth requires API key management at the API layer",
-        )
-
-    conversation_data.api_key_id = api_key_id
+        conversation_data.project_id = auth_context["project_id"]
 
     result = await service.create_conversation(conversation_data)
     if not result:
@@ -275,23 +267,15 @@ async def log_conversation(
 
     # For logging, we need an api_key_id to associate with the conversation
     # API key auth provides it directly
-    # User auth requires API key management (handled by llmring-api layer)
-    if auth_context["type"] == "api_key":
-        api_key_id = auth_context["api_key_id"]
-    else:
-        # User auth: API key should be passed in request or managed by caller
-        # For now, user auth is supported but requires explicit api_key handling
-        raise HTTPException(
-            status_code=501,
-            detail="Logging conversations with user auth requires API key management at the API layer",
-        )
+    api_key_id = auth_context.get("api_key_id")
+    project_id = auth_context.get("project_id") if auth_context["type"] == "user" else None
 
-    # Log the conversation
     result = await conversation_service.log_conversation(
         api_key_id=api_key_id,
         messages=log_request.messages,
         response=log_request.response,
         metadata=log_request.metadata.model_dump(),
+        project_id=project_id,
     )
 
     conversation_id = result["conversation_id"]

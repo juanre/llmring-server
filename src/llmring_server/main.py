@@ -118,7 +118,7 @@ def create_app(
     # Store settings immediately for reference (lifespan will update if needed)
     app.state.settings = settings
 
-    # CORS for self-hosting (restrict in production; '*' is acceptable for local dev)
+    # CORS for self-hosting (restrict in production; defaults to explicit localhost origins)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

@@ -52,18 +52,8 @@ async def create_server(
 ) -> MCPServer:
     """Register a new MCP server."""
     try:
-        # For creation, we need an api_key_id to associate with the server
-        # API key auth provides it directly
-        # User auth requires API key management (handled by llmring-api layer)
-        if auth_context["type"] == "api_key":
-            api_key_id = auth_context["api_key_id"]
-        else:
-            # User auth: API key should be passed in request or managed by caller
-            # For now, user auth is supported but requires explicit api_key handling
-            raise HTTPException(
-                status_code=status.HTTP_501_NOT_IMPLEMENTED,
-                detail="Creating servers with user auth requires API key management at the API layer",
-            )
+        api_key_id = auth_context.get("api_key_id") if auth_context["type"] == "api_key" else None
+        project_id = auth_context.get("project_id") if auth_context["type"] == "user" else None
 
         server_id = await mcp_service.create_server(
             name=server.name,
@@ -72,9 +62,14 @@ async def create_server(
             auth_config=server.auth_config,
             capabilities=server.capabilities,
             api_key_id=api_key_id,
+            project_id=project_id,
         )
 
-        server_data = await mcp_service.get_server(server_id, api_key_id=api_key_id)
+        server_data = await dispatch_by_auth_type(
+            auth_context,
+            lambda: mcp_service.get_server(server_id, api_key_id=api_key_id),
+            lambda: mcp_service.get_server(server_id, project_id=project_id),
+        )
         if not server_data:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -306,14 +301,8 @@ async def create_tool(
 ) -> MCPTool:
     """Create a new MCP tool."""
     try:
-        # For creation, similar to create_server - requires API key
-        if auth_context["type"] == "api_key":
-            api_key_id = auth_context["api_key_id"]
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_501_NOT_IMPLEMENTED,
-                detail="Creating tools with user auth requires API key management at the API layer",
-            )
+        api_key_id = auth_context.get("api_key_id") if auth_context["type"] == "api_key" else None
+        project_id = auth_context.get("project_id") if auth_context["type"] == "user" else None
 
         tool_id = await mcp_service.create_tool(
             server_id=tool.server_id,
@@ -321,9 +310,14 @@ async def create_tool(
             description=tool.description,
             input_schema=tool.input_schema,
             api_key_id=api_key_id,
+            project_id=project_id,
         )
 
-        tool_data = await mcp_service.get_tool(tool_id, api_key_id=api_key_id)
+        tool_data = await dispatch_by_auth_type(
+            auth_context,
+            lambda: mcp_service.get_tool(tool_id, api_key_id=api_key_id),
+            lambda: mcp_service.get_tool(tool_id, project_id=project_id),
+        )
         if not tool_data:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

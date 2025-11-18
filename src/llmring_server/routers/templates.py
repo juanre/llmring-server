@@ -34,18 +34,7 @@ async def create_template(
     if auth_context["type"] == "api_key":
         template_data.api_key_id = auth_context["api_key_id"]
     else:
-        # For user auth, we need to get the first active API key for the project
-        # This query gets the first active API key associated with the project
-        query = """
-        SELECT id::text as api_key_id
-        FROM llmring_api.api_keys
-        WHERE project_id = $1 AND is_active = true
-        LIMIT 1
-        """
-        result = await db.fetch_one(query, auth_context["project_id"])
-        if not result:
-            raise HTTPException(400, "No active API key found for project")
-        template_data.api_key_id = result["api_key_id"]
+        template_data.project_id = auth_context["project_id"]
 
     result = await service.create_template(template_data)
     if not result:

@@ -26,23 +26,8 @@ async def log_usage(
 ) -> UsageLogResponse:
     service = UsageService(db)
 
-    # Get the api_key_id to use for logging
-    if auth_context["type"] == "api_key":
-        api_key_id = auth_context["api_key_id"]
-    else:
-        # For user auth, we need to get the first active API key for the project
-        query = """
-        SELECT id::text as api_key_id
-        FROM llmring_api.api_keys
-        WHERE project_id = $1 AND is_active = true
-        LIMIT 1
-        """
-        result = await db.fetch_one(query, auth_context["project_id"])
-        if not result:
-            from fastapi import HTTPException
-
-            raise HTTPException(400, "No active API key found for project")
-        api_key_id = result["api_key_id"]
+    api_key_id = auth_context.get("api_key_id") if auth_context["type"] == "api_key" else None
+    project_id = auth_context.get("project_id") if auth_context["type"] == "user" else None
 
     # No built-in rate limiting in core server
     # Calculate cost if not provided
@@ -72,7 +57,7 @@ async def log_usage(
                 )
 
     timestamp = datetime.now()
-    result = await service.log_usage(api_key_id, log, cost, timestamp)
+    result = await service.log_usage(api_key_id, log, cost, timestamp, project_id=project_id)
 
     # Handle both old string return and new dict return for compatibility
     if isinstance(result, dict):
@@ -95,26 +80,12 @@ async def get_stats(
 ):
     service = UsageService(db)
 
-    # Get the api_key_id to use for filtering
-    if auth_context["type"] == "api_key":
-        api_key_id = auth_context["api_key_id"]
-    else:
-        # For user auth, we need to get the first active API key for the project
-        query = """
-        SELECT id::text as api_key_id
-        FROM llmring_api.api_keys
-        WHERE project_id = $1 AND is_active = true
-        LIMIT 1
-        """
-        result = await db.fetch_one(query, auth_context["project_id"])
-        if not result:
-            from fastapi import HTTPException
-
-            raise HTTPException(400, "No active API key found for project")
-        api_key_id = result["api_key_id"]
+    api_key_id = auth_context.get("api_key_id") if auth_context["type"] == "api_key" else None
+    project_id = auth_context.get("project_id") if auth_context["type"] == "user" else None
 
     return await service.get_stats(
         api_key_id=api_key_id,
+        project_id=project_id,
         start_date=start_date,
         end_date=end_date,
         group_by=group_by,
@@ -135,26 +106,12 @@ async def list_usage_logs(
 ):
     service = UsageService(db)
 
-    # Get the api_key_id to use for filtering
-    if auth_context["type"] == "api_key":
-        api_key_id = auth_context["api_key_id"]
-    else:
-        # For user auth, we need to get the first active API key for the project
-        query = """
-        SELECT id::text as api_key_id
-        FROM llmring_api.api_keys
-        WHERE project_id = $1 AND is_active = true
-        LIMIT 1
-        """
-        result = await db.fetch_one(query, auth_context["project_id"])
-        if not result:
-            from fastapi import HTTPException
-
-            raise HTTPException(400, "No active API key found for project")
-        api_key_id = result["api_key_id"]
+    api_key_id = auth_context.get("api_key_id") if auth_context["type"] == "api_key" else None
+    project_id = auth_context.get("project_id") if auth_context["type"] == "user" else None
 
     logs = await service.get_logs(
         api_key_id=api_key_id,
+        project_id=project_id,
         limit=limit,
         offset=offset,
         start_date=start_date,

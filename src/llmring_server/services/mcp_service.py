@@ -3,10 +3,12 @@
 
 """MCP (Model Context Protocol) service for llmring-server."""
 
+import ipaddress
 import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 from uuid import UUID
 
 from pgdbm import AsyncDatabaseManager
@@ -35,12 +37,13 @@ class MCPService:
         auth_config: Optional[Dict[str, Any]] = None,
         capabilities: Optional[Dict[str, Any]] = None,
         api_key_id: Optional[str] = None,
+        project_id: Optional[str] = None,
     ) -> UUID:
         """Create a new MCP server.
 
         Args:
             name: Server name
-            url: Server URL
+            url: Server URL (validated to prevent SSRF)
             transport_type: Transport type (stdio, http, websocket)
             auth_config: Authentication configuration
             capabilities: Server capabilities
@@ -49,10 +52,12 @@ class MCPService:
         Returns:
             Server ID
         """
+        _validate_mcp_url(url)
+
         query = """
             INSERT INTO mcp_client.servers (
-                name, url, transport_type, auth_config, capabilities, api_key_id
-            ) VALUES ($1, $2, $3, $4, $5, $6)
+                name, url, transport_type, auth_config, capabilities, api_key_id, project_id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING id
         """
 
@@ -64,6 +69,7 @@ class MCPService:
             json.dumps(auth_config) if auth_config else None,
             json.dumps(capabilities) if capabilities else None,
             api_key_id,
+            project_id,
         )
         return result["id"]
 
@@ -96,13 +102,11 @@ class MCPService:
                 WHERE id = $1 AND api_key_id = $2
             """
             result = await self.db.fetch_one(query, server_id, api_key_id)
-        elif user_id and project_id:
-            # User authentication - filter by project_id via cross-schema join
+        elif project_id:
             query = """
-                SELECT s.*
-                FROM mcp_client.servers s
-                JOIN llmring_api.api_keys k ON k.id::text = s.api_key_id
-                WHERE s.id = $1 AND k.project_id = $2
+                SELECT *
+                FROM mcp_client.servers
+                WHERE id = $1 AND project_id = $2
             """
             result = await self.db.fetch_one(query, server_id, project_id)
         else:
@@ -113,6 +117,8 @@ class MCPService:
 
         # Convert to dict and parse JSON fields
         server = dict(result)
+        if server.get("project_id") is not None:
+            server["project_id"] = str(server["project_id"])
         if server.get("auth_config") and isinstance(server["auth_config"], str):
             server["auth_config"] = json.loads(server["auth_config"])
         if server.get("capabilities") and isinstance(server["capabilities"], str):
@@ -149,15 +155,12 @@ class MCPService:
                 ORDER BY created_at DESC
             """
             results = await self.db.fetch_all(query, api_key_id, is_active)
-        elif user_id and project_id:
-            # User authentication - filter by project_id
-            # Cross-schema query: api_keys in llmring_api schema, mcp_servers in mcp_client schema
+        elif project_id:
             query = """
-                SELECT s.*
-                FROM mcp_client.servers s
-                JOIN llmring_api.api_keys k ON k.id::text = s.api_key_id
-                WHERE k.project_id::text = $1 AND s.is_active = $2
-                ORDER BY s.created_at DESC
+                SELECT *
+                FROM mcp_client.servers
+                WHERE project_id::text = $1 AND is_active = $2
+                ORDER BY created_at DESC
             """
             results = await self.db.fetch_all(query, project_id, is_active)
         else:
@@ -166,6 +169,8 @@ class MCPService:
         servers = []
         for r in results:
             server = dict(r)
+            if server.get("project_id") is not None:
+                server["project_id"] = str(server["project_id"])
             if server.get("auth_config") and isinstance(server["auth_config"], str):
                 server["auth_config"] = json.loads(server["auth_config"])
             if server.get("capabilities") and isinstance(server["capabilities"], str):
@@ -271,6 +276,11 @@ class MCPService:
             True if refreshed
         """
         # Start transaction
+        server_row = await self.db.fetch_one(
+            "SELECT project_id FROM mcp_client.servers WHERE id = $1", server_id
+        )
+        project_id = server_row.get("project_id") if server_row else None
+
         async with self.db.transaction():
             # Delete existing tools, resources, prompts
             await self.db.execute("DELETE FROM mcp_client.tools WHERE server_id = $1", server_id)
@@ -284,13 +294,14 @@ class MCPService:
                 await self.db.execute(
                     """
                     INSERT INTO mcp_client.tools (
-                        server_id, name, description, input_schema
-                    ) VALUES ($1, $2, $3, $4)
+                        server_id, name, description, input_schema, project_id
+                    ) VALUES ($1, $2, $3, $4, $5)
                     """,
                     server_id,
                     tool["name"],
                     tool.get("description"),
                     tool.get("inputSchema", {}),
+                    project_id,
                 )
 
             # Insert new resources
@@ -298,14 +309,15 @@ class MCPService:
                 await self.db.execute(
                     """
                     INSERT INTO mcp_client.resources (
-                        server_id, uri, name, description, mime_type
-                    ) VALUES ($1, $2, $3, $4, $5)
+                        server_id, uri, name, description, mime_type, project_id
+                    ) VALUES ($1, $2, $3, $4, $5, $6)
                     """,
                     server_id,
                     resource["uri"],
                     resource.get("name"),
                     resource.get("description"),
                     resource.get("mimeType"),
+                    project_id,
                 )
 
             # Insert new prompts
@@ -313,13 +325,14 @@ class MCPService:
                 await self.db.execute(
                     """
                     INSERT INTO mcp_client.prompts (
-                        server_id, name, description, arguments
-                    ) VALUES ($1, $2, $3, $4)
+                        server_id, name, description, arguments, project_id
+                    ) VALUES ($1, $2, $3, $4, $5)
                     """,
                     server_id,
                     prompt["name"],
                     prompt.get("description"),
                     prompt.get("arguments"),
+                    project_id,
                 )
 
             # Update server capabilities
@@ -349,6 +362,7 @@ class MCPService:
         description: Optional[str] = None,
         input_schema: Dict[str, Any] = None,
         api_key_id: Optional[str] = None,
+        project_id: Optional[str] = None,
     ) -> UUID:
         """Create a new MCP tool.
 
@@ -364,8 +378,8 @@ class MCPService:
         """
         query = """
             INSERT INTO mcp_client.tools (
-                server_id, name, description, input_schema, api_key_id
-            ) VALUES ($1, $2, $3, $4, $5)
+                server_id, name, description, input_schema, api_key_id, project_id
+            ) VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING id
         """
 
@@ -376,6 +390,7 @@ class MCPService:
             description,
             json.dumps(input_schema) if input_schema else None,
             api_key_id,
+            project_id,
         )
         return result["id"]
 
@@ -421,14 +436,13 @@ class MCPService:
 
             query += " ORDER BY t.name"
             results = await self.db.fetch_all(query, *params)
-        elif user_id and project_id:
-            # User authentication - filter by project_id via cross-schema join
+        elif project_id:
+            # User authentication - filter by project_id
             query = """
                 SELECT t.*, s.name as server_name, s.url as server_url
                 FROM mcp_client.tools t
                 JOIN mcp_client.servers s ON t.server_id = s.id
-                JOIN llmring_api.api_keys k ON k.id::text = t.api_key_id
-                WHERE t.is_active = $1 AND k.project_id = $2
+                WHERE t.is_active = $1 AND t.project_id = $2
             """
             params = [is_active, project_id]
             param_count = 2
@@ -446,6 +460,8 @@ class MCPService:
         tools = []
         for r in results:
             tool = dict(r)
+            if tool.get("project_id") is not None:
+                tool["project_id"] = str(tool["project_id"])
             if tool.get("input_schema") and isinstance(tool["input_schema"], str):
                 tool["input_schema"] = json.loads(tool["input_schema"])
             tools.append(tool)
@@ -482,14 +498,13 @@ class MCPService:
                 WHERE t.id = $1 AND t.api_key_id = $2
             """
             result = await self.db.fetch_one(query, tool_id, api_key_id)
-        elif user_id and project_id:
-            # User authentication - filter by project_id via cross-schema join
+        elif project_id:
+            # User authentication - filter by project_id
             query = """
                 SELECT t.*, s.name as server_name, s.url as server_url
                 FROM mcp_client.tools t
                 JOIN mcp_client.servers s ON t.server_id = s.id
-                JOIN llmring_api.api_keys k ON k.id::text = t.api_key_id
-                WHERE t.id = $1 AND k.project_id = $2
+                WHERE t.id = $1 AND t.project_id = $2
             """
             result = await self.db.fetch_one(query, tool_id, project_id)
         else:
@@ -499,6 +514,8 @@ class MCPService:
             return None
 
         tool = dict(result)
+        if tool.get("project_id") is not None:
+            tool["project_id"] = str(tool["project_id"])
         if tool.get("input_schema") and isinstance(tool["input_schema"], str):
             tool["input_schema"] = json.loads(tool["input_schema"])
         return tool
@@ -595,7 +612,13 @@ class MCPService:
         """
 
         results = await self.db.fetch_all(query, tool_id, limit)
-        return [dict(r) for r in results]
+        normalized = []
+        for r in results:
+            item = dict(r)
+            if item.get("project_id") is not None:
+                item["project_id"] = str(item["project_id"])
+            normalized.append(item)
+        return normalized
 
     # ============= Resource Management =============
 
@@ -641,14 +664,13 @@ class MCPService:
 
             query += " ORDER BY r.uri"
             results = await self.db.fetch_all(query, *params)
-        elif user_id and project_id:
-            # User authentication - filter by project_id via cross-schema join
+        elif project_id:
+            # User authentication - filter by project_id
             query = """
                 SELECT r.*, s.name as server_name, s.url as server_url
                 FROM mcp_client.resources r
                 JOIN mcp_client.servers s ON r.server_id = s.id
-                JOIN llmring_api.api_keys k ON k.id::text = r.api_key_id
-                WHERE r.is_active = $1 AND k.project_id = $2
+                WHERE r.is_active = $1 AND r.project_id = $2
             """
             params = [is_active, project_id]
             param_count = 2
@@ -663,7 +685,13 @@ class MCPService:
         else:
             raise ValueError("Must provide either api_key_id or (user_id + project_id)")
 
-        return [dict(r) for r in results]
+        normalized = []
+        for r in results:
+            item = dict(r)
+            if item.get("project_id") is not None:
+                item["project_id"] = str(item["project_id"])
+            normalized.append(item)
+        return normalized
 
     async def get_resource(
         self,
@@ -696,20 +724,24 @@ class MCPService:
                 WHERE r.id = $1 AND r.api_key_id = $2
             """
             result = await self.db.fetch_one(query, resource_id, api_key_id)
-        elif user_id and project_id:
-            # User authentication - filter by project_id via cross-schema join
+        elif project_id:
+            # User authentication - filter by project_id
             query = """
                 SELECT r.*, s.name as server_name, s.url as server_url
                 FROM mcp_client.resources r
                 JOIN mcp_client.servers s ON r.server_id = s.id
-                JOIN llmring_api.api_keys k ON k.id::text = r.api_key_id
-                WHERE r.id = $1 AND k.project_id = $2
+                WHERE r.id = $1 AND r.project_id = $2
             """
             result = await self.db.fetch_one(query, resource_id, project_id)
         else:
             raise ValueError("Must provide either api_key_id or (user_id + project_id)")
 
-        return dict(result) if result else None
+        if not result:
+            return None
+        item = dict(result)
+        if item.get("project_id") is not None:
+            item["project_id"] = str(item["project_id"])
+        return item
 
     # ============= Prompt Management =============
 
@@ -755,14 +787,13 @@ class MCPService:
 
             query += " ORDER BY p.name"
             results = await self.db.fetch_all(query, *params)
-        elif user_id and project_id:
-            # User authentication - filter by project_id via cross-schema join
+        elif project_id:
+            # User authentication - filter by project_id
             query = """
                 SELECT p.*, s.name as server_name, s.url as server_url
                 FROM mcp_client.prompts p
                 JOIN mcp_client.servers s ON p.server_id = s.id
-                JOIN llmring_api.api_keys k ON k.id::text = p.api_key_id
-                WHERE p.is_active = $1 AND k.project_id = $2
+                WHERE p.is_active = $1 AND p.project_id = $2
             """
             params = [is_active, project_id]
             param_count = 2
@@ -810,17 +841,50 @@ class MCPService:
                 WHERE p.id = $1 AND p.api_key_id = $2
             """
             result = await self.db.fetch_one(query, prompt_id, api_key_id)
-        elif user_id and project_id:
-            # User authentication - filter by project_id via cross-schema join
+        elif project_id:
+            # User authentication - filter by project_id
             query = """
                 SELECT p.*, s.name as server_name, s.url as server_url
                 FROM mcp_client.prompts p
                 JOIN mcp_client.servers s ON p.server_id = s.id
-                JOIN llmring_api.api_keys k ON k.id::text = p.api_key_id
-                WHERE p.id = $1 AND k.project_id = $2
+                WHERE p.id = $1 AND p.project_id = $2
             """
             result = await self.db.fetch_one(query, prompt_id, project_id)
         else:
             raise ValueError("Must provide either api_key_id or (user_id + project_id)")
 
-        return dict(result) if result else None
+        if not result:
+            return None
+        item = dict(result)
+        if item.get("project_id") is not None:
+            item["project_id"] = str(item["project_id"])
+        return item
+
+
+def _validate_mcp_url(url: str) -> None:
+    """Validate an MCP server URL to prevent SSRF exposure."""
+    try:
+        parsed = urlparse(url)
+    except Exception as exc:
+        raise ValueError("Invalid MCP server URL") from exc
+
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("MCP server URL must use http or https")
+
+    if not parsed.hostname:
+        raise ValueError("MCP server URL must include a hostname")
+
+    hostname = parsed.hostname.lower()
+
+    # Block obvious localhost hostnames
+    if hostname in {"localhost", "127.0.0.1", "0.0.0.0", "::1"}:
+        raise ValueError("MCP server URL cannot point to localhost")
+
+    # Block IP literals in private/loopback/link-local ranges
+    try:
+        ip = ipaddress.ip_address(hostname)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved:
+            raise ValueError("MCP server URL cannot point to private or internal addresses")
+    except ValueError:
+        # Hostname is not an IP literal; allow DNS hosts
+        pass
