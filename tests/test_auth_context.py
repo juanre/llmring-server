@@ -80,8 +80,15 @@ async def test_api_key_auth_context():
     """Test API key authentication returns api_key_id context."""
 
     # Mock request with X-API-Key header
+    class MockState:
+        pass
+
+    class MockApp:
+        state = MockState()
+
     class MockRequest:
         headers = {"x-api-key": "test-api-key-id"}
+        app = MockApp()
 
     request = MockRequest()
     context = await get_auth_context(request)
@@ -92,17 +99,57 @@ async def test_api_key_auth_context():
 
 
 @pytest.mark.asyncio
-async def test_user_auth_context():
+async def test_user_auth_context(llmring_db):
     """Test user authentication returns user_id + project_id context."""
 
-    # Mock request with X-User-ID and X-Project-ID headers
-    class MockRequest:
-        headers = {
-            "x-user-id": "00000000-0000-0000-0000-000000000001",
-            "x-project-id": "10000000-0000-0000-0000-000000000001",
-        }
+    # Setup test data - create a project owned by the user
+    await llmring_db.execute("CREATE SCHEMA IF NOT EXISTS llmring_api")
+    await llmring_db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS llmring_api.projects (
+            id UUID PRIMARY KEY,
+            user_id UUID NOT NULL,
+            name VARCHAR(255)
+        )
+        """
+    )
+    await llmring_db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS llmring_api.project_members (
+            project_id UUID,
+            user_id UUID,
+            PRIMARY KEY (project_id, user_id)
+        )
+        """
+    )
+    await llmring_db.execute(
+        """
+        INSERT INTO llmring_api.projects (id, user_id, name)
+        VALUES ('10000000-0000-0000-0000-000000000001'::uuid,
+                '00000000-0000-0000-0000-000000000001'::uuid,
+                'Test Project')
+        ON CONFLICT DO NOTHING
+        """
+    )
 
-    request = MockRequest()
+    # Mock request with X-User-ID and X-Project-ID headers
+    class MockState:
+        def __init__(self, db):
+            self.db = db
+
+    class MockApp:
+        def __init__(self, db):
+            self.state = MockState(db)
+
+    class MockRequest:
+        def __init__(self, db):
+            self.headers = {
+                "x-user-id": "00000000-0000-0000-0000-000000000001",
+                "x-project-id": "10000000-0000-0000-0000-000000000001",
+            }
+            self.app = MockApp(db)
+
+    request = MockRequest(llmring_db)
     context = await get_auth_context(request)
 
     assert context["type"] == "user"
@@ -116,8 +163,15 @@ async def test_no_auth_context_raises_401():
     """Test missing authentication raises 401."""
 
     # Mock request with no auth headers
+    class MockState:
+        pass
+
+    class MockApp:
+        state = MockState()
+
     class MockRequest:
         headers = {}
+        app = MockApp()
 
     request = MockRequest()
 
@@ -644,8 +698,15 @@ async def test_conversation_messages_authorization_bypass(test_app, setup_api_ke
 async def test_invalid_uuid_format_raises_400():
     """Test that invalid UUID format in headers raises 400."""
 
+    class MockState:
+        pass
+
+    class MockApp:
+        state = MockState()
+
     class MockRequest:
         headers = {"x-user-id": "not-a-uuid", "x-project-id": "also-not-a-uuid"}
+        app = MockApp()
 
     request = MockRequest()
 

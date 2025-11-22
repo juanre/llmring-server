@@ -23,7 +23,7 @@ async def test_create_mcp_server(test_app):
         "/api/v1/mcp/servers",
         json={
             "name": "Test MCP Server",
-            "url": "http://localhost:8080",
+            "url": "http://mcp-server.example.com",
             "transport_type": "http",
             "auth_config": {"type": "bearer", "token": "test-token"},
             "capabilities": {"tools": True, "resources": True, "prompts": False},
@@ -34,7 +34,7 @@ async def test_create_mcp_server(test_app):
     assert response.status_code == 200
     data = response.json()
     assert data["name"] == "Test MCP Server"
-    assert data["url"] == "http://localhost:8080"
+    assert data["url"] == "http://mcp-server.example.com"
     assert data["transport_type"] == "http"
     assert data["is_active"] is True
     assert "id" in data
@@ -49,7 +49,7 @@ async def test_list_mcp_servers(test_app):
             "/api/v1/mcp/servers",
             json={
                 "name": f"Server {i}",
-                "url": f"http://localhost:808{i}",
+                "url": f"http://mcp-server-{i}.example.com",
                 "transport_type": "http",
             },
             headers={"X-API-Key": "test-list-project"},
@@ -74,7 +74,7 @@ async def test_get_mcp_server(test_app):
         "/api/v1/mcp/servers",
         json={
             "name": "Get Test Server",
-            "url": "http://localhost:8080",
+            "url": "http://mcp-server.example.com",
             "transport_type": "stdio",
         },
         headers={"X-API-Key": "test-project"},
@@ -102,7 +102,7 @@ async def test_update_mcp_server(test_app):
         "/api/v1/mcp/servers",
         json={
             "name": "Original Name",
-            "url": "http://localhost:8080",
+            "url": "http://mcp-server.example.com",
             "transport_type": "http",
         },
         headers={"X-API-Key": "test-project"},
@@ -134,7 +134,7 @@ async def test_delete_mcp_server(test_app):
         "/api/v1/mcp/servers",
         json={
             "name": "To Delete",
-            "url": "http://localhost:8080",
+            "url": "http://mcp-server.example.com",
             "transport_type": "http",
         },
         headers={"X-API-Key": "test-project"},
@@ -166,7 +166,7 @@ async def test_create_mcp_tool(test_app):
         "/api/v1/mcp/servers",
         json={
             "name": "Tool Server",
-            "url": "http://localhost:8080",
+            "url": "http://mcp-server.example.com",
             "transport_type": "http",
         },
         headers={"X-API-Key": "test-project"},
@@ -203,7 +203,7 @@ async def test_list_mcp_tools(test_app):
         "/api/v1/mcp/servers",
         json={
             "name": "Tools Server",
-            "url": "http://localhost:8080",
+            "url": "http://mcp-server.example.com",
             "transport_type": "http",
         },
         headers={"X-API-Key": "test-tools-project"},
@@ -243,7 +243,7 @@ async def test_execute_mcp_tool(test_app):
         "/api/v1/mcp/servers",
         json={
             "name": "Execution Server",
-            "url": "http://localhost:8080",
+            "url": "http://mcp-server.example.com",
             "transport_type": "http",
         },
         headers={"X-API-Key": "test-project"},
@@ -291,7 +291,7 @@ async def test_mcp_server_isolation_by_api_key(test_app):
         "/api/v1/mcp/servers",
         json={
             "name": "Isolated Server",
-            "url": "http://localhost:8080",
+            "url": "http://mcp-server.example.com",
             "transport_type": "http",
         },
         headers={"X-API-Key": "project-1"},
@@ -316,7 +316,7 @@ async def test_mcp_requires_auth(test_app):
         "/api/v1/mcp/servers",
         json={
             "name": "No Auth",
-            "url": "http://localhost:8080",
+            "url": "http://mcp-server.example.com",
             "transport_type": "http",
         },
     )
@@ -327,7 +327,7 @@ async def test_mcp_requires_auth(test_app):
         "/api/v1/mcp/servers",
         json={
             "name": "Empty Auth",
-            "url": "http://localhost:8080",
+            "url": "http://mcp-server.example.com",
             "transport_type": "http",
         },
         headers={"X-API-Key": ""},
