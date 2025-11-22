@@ -207,7 +207,7 @@ class TemplateService:
         where_clause = f"WHERE id = ${param_num}"
 
         query = f"""
-        UPDATE {{tables.conversation_templates}}
+        UPDATE {{{{tables.conversation_templates}}}}
         SET {', '.join(updates)}
         {where_clause}
         RETURNING *

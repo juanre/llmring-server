@@ -178,7 +178,7 @@ class UsageService:
                 COALESCE(SUM(input_tokens + output_tokens), 0) as total_tokens,
                 COUNT(DISTINCT model) as unique_models,
                 COUNT(DISTINCT origin) as unique_origins
-            FROM {{tables.usage_logs}}
+            FROM {{{{tables.usage_logs}}}}
             WHERE {filter_column} = $1
                 AND created_at >= $2::timestamptz
                 AND created_at <= $3::timestamptz
@@ -224,7 +224,7 @@ class UsageService:
                 COUNT(*) as requests,
                 COALESCE(SUM(cost), 0) as cost,
                 model as top_model
-            FROM {{tables.usage_logs}}
+            FROM {{{{tables.usage_logs}}}}
             WHERE {filter_column} = $1
                 AND created_at >= $2::timestamptz
                 AND created_at <= $3::timestamptz
@@ -256,7 +256,7 @@ class UsageService:
                 COALESCE(SUM(cost), 0) as cost,
                 COALESCE(SUM(input_tokens), 0) as input_tokens,
                 COALESCE(SUM(output_tokens), 0) as output_tokens
-            FROM {{tables.usage_logs}}
+            FROM {{{{tables.usage_logs}}}}
             WHERE {filter_column} = $1
                 AND created_at >= $2::timestamptz
                 AND created_at <= $3::timestamptz
@@ -277,7 +277,7 @@ class UsageService:
                 origin,
                 COUNT(*) as requests,
                 COALESCE(SUM(cost), 0) as cost
-            FROM {{tables.usage_logs}}
+            FROM {{{{tables.usage_logs}}}}
             WHERE {filter_column} = $1
                 AND created_at >= $2::timestamptz
                 AND created_at <= $3::timestamptz
@@ -299,7 +299,7 @@ class UsageService:
                 COALESCE(SUM(cost), 0) as cost,
                 COALESCE(SUM(input_tokens), 0) as input_tokens,
                 COALESCE(SUM(output_tokens), 0) as output_tokens
-            FROM {{tables.usage_logs}}
+            FROM {{{{tables.usage_logs}}}}
             WHERE {filter_column} = $1
                 AND created_at >= $2::timestamptz
                 AND created_at <= $3::timestamptz
