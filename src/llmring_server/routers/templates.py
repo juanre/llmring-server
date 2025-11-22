@@ -1,5 +1,4 @@
-# ABOUTME: FastAPI router for conversation template management.
-# ABOUTME: Handles template CRUD operations and tracks template usage statistics.
+"""FastAPI router for conversation template management. Handles template CRUD operations and tracks template usage statistics."""
 
 """API routes for conversation templates."""
 

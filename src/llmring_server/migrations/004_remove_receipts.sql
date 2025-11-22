@@ -1,5 +1,4 @@
--- ABOUTME: Migration 004 removes the cryptographic receipts feature from llmring-server
--- ABOUTME: Drops receipts and receipt_logs tables, removes receipt references from triggers
+-- Migration 004 removes the cryptographic receipts feature from llmring-server Drops receipts and receipt_logs tables, removes receipt references from triggers
 
 -- Migration 004: Remove receipts feature
 -- Date: 2025-11-03

@@ -1,5 +1,4 @@
-# ABOUTME: Helper utilities for handling dual authentication modes (API key and user auth).
-# ABOUTME: Provides dispatch and validation functions to reduce code duplication across routers.
+"""Helper utilities for handling dual authentication modes (API key and user auth). Provides dispatch and validation functions to reduce code duplication across routers."""
 
 """Helper utilities for handling dual authentication modes."""
 

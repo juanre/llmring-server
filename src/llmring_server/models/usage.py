@@ -1,5 +1,4 @@
-# ABOUTME: Pydantic models for LLM usage logging and statistics.
-# ABOUTME: Defines usage log requests, responses, daily summaries, and model-specific usage stats.
+"""Pydantic models for LLM usage logging and statistics. Defines usage log requests, responses, daily summaries, and model-specific usage stats."""
 
 from datetime import datetime
 from decimal import Decimal

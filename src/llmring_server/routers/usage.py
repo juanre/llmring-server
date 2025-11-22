@@ -1,5 +1,4 @@
-# ABOUTME: FastAPI router for LLM usage logging and statistics.
-# ABOUTME: Handles usage log creation, retrieval with filtering, and aggregated statistics.
+"""FastAPI router for LLM usage logging and statistics. Handles usage log creation, retrieval with filtering, and aggregated statistics."""
 
 from datetime import datetime
 from typing import Optional

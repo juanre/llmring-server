@@ -1,5 +1,4 @@
-# ABOUTME: Business logic for LLM usage logging and statistics aggregation.
-# ABOUTME: Logs usage data with Redis caching and provides daily/model-level analytics.
+"""Business logic for LLM usage logging and statistics aggregation. Logs usage data with Redis caching and provides daily/model-level analytics."""
 
 import json
 from datetime import datetime, timedelta, timezone

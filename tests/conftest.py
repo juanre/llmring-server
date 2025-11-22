@@ -1,5 +1,4 @@
-# ABOUTME: Pytest configuration and fixtures for llmring-server tests.
-# ABOUTME: Provides test database setup, test client, and test app fixtures.
+"""Pytest configuration and fixtures for llmring-server tests. Provides test database setup, test client, and test app fixtures."""
 
 import getpass
 import os

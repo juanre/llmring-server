@@ -1,5 +1,4 @@
-# ABOUTME: FastAPI router for MCP (Model Context Protocol) server management.
-# ABOUTME: Handles MCP servers, tools, resources, prompts, and tool execution tracking.
+"""FastAPI router for MCP (Model Context Protocol) server management. Handles MCP servers, tools, resources, prompts, and tool execution tracking."""
 
 """MCP (Model Context Protocol) router for llmring-server."""
 

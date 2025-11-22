@@ -1,7 +1,4 @@
-# ABOUTME: Business logic for MCP (Model Context Protocol) server and tool management.
-# ABOUTME: Handles MCP servers, tools, resources, prompts, and tracks tool execution history.
-
-"""MCP (Model Context Protocol) service for llmring-server."""
+"""MCP (Model Context Protocol) service for managing servers, tools, resources, prompts, and history."""
 
 import ipaddress
 import json

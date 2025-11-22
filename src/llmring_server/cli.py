@@ -1,5 +1,4 @@
-# ABOUTME: Command-line interface for llmring-server database and server management.
-# ABOUTME: Provides commands for migrations, database creation, and running the development server.
+"""CLI for llmring-server database and server management (migrations, DB creation, dev server)."""
 
 import asyncio
 import logging

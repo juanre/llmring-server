@@ -1,5 +1,4 @@
-# ABOUTME: FastAPI dependencies for API key validation and database access.
-# ABOUTME: Provides get_auth_context for authentication and get_db for database injection.
+"""FastAPI dependencies for authentication context and database access."""
 
 import logging
 from typing import Dict, Optional
@@ -95,7 +94,6 @@ async def get_auth_context(request: Request) -> Dict[str, Optional[str]]:
             "project_id": project_id,
         }
 
-    # No valid authentication found
     raise HTTPException(
         status_code=401,
         detail="Authentication required: provide X-API-Key or (X-User-ID + X-Project-ID)",

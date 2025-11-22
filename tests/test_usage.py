@@ -1,5 +1,4 @@
-# ABOUTME: Tests for usage logging and statistics endpoints.
-# ABOUTME: Covers usage log creation, retrieval with filtering, and aggregated stats.
+"""Tests for usage logging and statistics endpoints. Covers usage log creation, retrieval with filtering, and aggregated stats."""
 
 import pytest
 

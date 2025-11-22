@@ -1,5 +1,4 @@
-# ABOUTME: Tests for conversation and message management endpoints and services.
-# ABOUTME: Covers conversation CRUD, message batching, logging levels, and retention cleanup.
+"""Tests for conversation and message management endpoints and services. Covers conversation CRUD, message batching, logging levels, and retention cleanup."""
 
 """Tests for conversation and message management."""
 

@@ -1,5 +1,4 @@
-# ABOUTME: Business logic for LLM model registry lookups from GitHub Pages.
-# ABOUTME: Fetches registry data with Redis caching and supports provider filtering.
+"""Business logic for LLM model registry lookups from GitHub Pages. Fetches registry data with Redis caching and supports provider filtering."""
 
 from datetime import datetime
 from typing import Dict, List, Optional

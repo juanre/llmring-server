@@ -1,5 +1,4 @@
-# ABOUTME: Pydantic models for LLM model registry responses.
-# ABOUTME: Defines model metadata, provider information, and pricing data from GitHub Pages registry.
+"""Pydantic models for LLM model registry responses. Defines model metadata, provider information, and pricing data from GitHub Pages registry."""
 
 from datetime import datetime
 from typing import Dict, Optional

@@ -1,5 +1,4 @@
-# ABOUTME: Test authentication context handling for browser vs programmatic access.
-# ABOUTME: Verifies get_auth_context extracts API key or user+project authentication.
+"""Test authentication context handling for browser vs programmatic access. Verifies get_auth_context extracts API key or user+project authentication."""
 
 import pytest
 import pytest_asyncio

@@ -1,5 +1,4 @@
-# ABOUTME: Pydantic models for MCP (Model Context Protocol) servers, tools, resources, and prompts.
-# ABOUTME: Defines data structures for managing MCP integration and tool execution tracking.
+"""Pydantic models for MCP (Model Context Protocol) servers, tools, resources, and prompts. Defines data structures for managing MCP integration and tool execution tracking."""
 
 """MCP (Model Context Protocol) models for llmring-server."""
 

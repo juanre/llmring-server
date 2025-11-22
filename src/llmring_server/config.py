@@ -1,5 +1,4 @@
-# ABOUTME: Server configuration with Pydantic Settings loaded from environment variables.
-# ABOUTME: Defines database, Redis, CORS, and message logging settings.
+"""Server configuration loaded from environment variables (database, Redis, CORS, logging)."""
 
 from enum import Enum
 from typing import Optional

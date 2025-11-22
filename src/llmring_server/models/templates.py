@@ -1,5 +1,4 @@
-# ABOUTME: Pydantic models for conversation templates with reusable settings.
-# ABOUTME: Defines template creation, updates, and usage tracking for conversation presets.
+"""Pydantic models for conversation templates with reusable settings. Defines template creation, updates, and usage tracking for conversation presets."""
 
 """Models for conversation templates."""
 

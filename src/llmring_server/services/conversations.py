@@ -1,5 +1,4 @@
-# ABOUTME: Business logic for conversation and message management with configurable logging.
-# ABOUTME: Handles conversation CRUD, message batching, hash-based deduplication, and retention cleanup.
+"""Business logic for conversation and message management with configurable logging. Handles conversation CRUD, message batching, hash-based deduplication, and retention cleanup."""
 
 """Service for conversation and message management."""
 

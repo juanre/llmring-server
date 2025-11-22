@@ -1,5 +1,4 @@
-# ABOUTME: FastAPI router for LLM model registry lookups.
-# ABOUTME: Proxies GitHub Pages registry with caching and provider filtering support.
+"""FastAPI router for LLM model registry lookups. Proxies GitHub Pages registry with caching and provider filtering support."""
 
 from typing import Optional
 
