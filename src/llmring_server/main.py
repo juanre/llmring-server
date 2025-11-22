@@ -116,6 +116,7 @@ def create_app(
 
     # Store settings immediately for reference (lifespan will update if needed)
     app.state.settings = settings
+    app.state.enforce_user_project_membership = settings.enforce_membership_verification
 
     # CORS for self-hosting (restrict in production; defaults to explicit localhost origins)
     app.add_middleware(

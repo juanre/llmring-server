@@ -93,6 +93,13 @@ class Settings(BaseSettings):
         description="Whether to track conversations (even without message content)",
     )
 
+    # Security configuration
+    enforce_membership_verification: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("LLMRING_ENFORCE_MEMBERSHIP_VERIFICATION"),
+        description="Verify user project membership for JWT auth (disable only in trusted environments)",
+    )
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _parse_cors_origins(cls, value):
