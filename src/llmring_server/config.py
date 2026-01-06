@@ -59,7 +59,10 @@ class Settings(BaseSettings):
     )
 
     # API Configuration (prefix not used at core level; routes include their own prefixes)
-    cors_origins: list[str] = Field(
+    # Accept both:
+    # - JSON array (pydantic-settings default for complex types): '["http://a","http://b"]'
+    # - Comma-separated string: "http://a,http://b"
+    cors_origins: list[str] | str = Field(
         default=["http://localhost:5173", "http://localhost:5174"],
         validation_alias=AliasChoices("LLMRING_CORS_ORIGINS"),
     )

@@ -21,36 +21,55 @@ Requirements:
 Install and run:
 
 ```bash
-# from repo root or this directory
-uv run llmring-server --reload
-# or
-uv run python -m llmring_server.cli --reload
+make dev
 ```
 
-By default the server listens on http://0.0.0.0:8000 and exposes Swagger UI at `/docs`.
+By default the dev server listens on http://0.0.0.0:9101 and exposes Swagger UI at `/docs`.
 
-### Docker Compose (local stack)
+Manual alternative:
 
 ```bash
-docker compose -f docker-compose.dev.yml up --build
+uv run llmring-server serve --env dev --reload --port 9101
+```
+
+### Docker Compose (production-like local stack)
+
+```bash
+make docker
 ```
 
 Services:
 - `db`: PostgreSQL 15 with persistent volume
 - `redis`: Redis 7 for caching/rate limiting (optional but bundled)
-- `server`: llmring-server with `uvicorn --reload`
+- `server`: llmring-server (production-like)
+
+Default ports:
+- `server`: http://localhost:9100 (override with `LLMRING_HTTP_PORT=...`)
+
+Common commands:
+- `make docker-stop` — stop the Docker stack
+- `make logs` — follow Docker logs
+- `make status` — show Docker status
+
+### Docker image (server only)
+
+```bash
+docker build -t llmring-server .
+docker run --rm -p 9100:8000 \
+  -e LLMRING_DATABASE_URL='postgresql://user:pass@host:5432/dbname' \
+  llmring-server
+```
 
 ### Bare-metal development helper
 
 ```bash
-# Ensure you have a local Postgres running (defaults: postgres/postgres)
 ./scripts/dev-server.sh
 ```
 
 The script:
 1. Creates the development database if needed (`uv run llmring-server db create --env dev`)
 2. Runs migrations (`uv run llmring-server db migrate --env dev`)
-3. Starts the FastAPI server with auto-reload
+3. Starts the FastAPI server with auto-reload (default port `9101`, override with `LLMRING_PORT=...`)
 
 ### Bootstrap client configuration
 
@@ -79,7 +98,7 @@ Configuration is provided via environment variables (Pydantic Settings). Key var
 - LLMRING_DATABASE_POOL_OVERFLOW: Pool overflow (default: 10)
 - LLMRING_REDIS_URL: Redis URL for caching (default: redis://localhost:6379/0)
 - LLMRING_CACHE_TTL: Cache TTL seconds (default: 3600)
-- LLMRING_CORS_ORIGINS: Comma-separated origins (default: http://localhost:5173,http://localhost:5174,*)
+- LLMRING_CORS_ORIGINS: Comma-separated origins or JSON array (default: http://localhost:5173,http://localhost:5174)
 - LLMRING_REGISTRY_BASE_URL: Base URL for the public registry (default: https://llmring.github.io/registry/)
 
 Minimal required: set `LLMRING_DATABASE_URL` to a reachable Postgres instance.
