@@ -1,6 +1,6 @@
 [project]
 name = "llmring-server"
-version = "0.1.2"
+version = "0.1.3"
 description = "LLMRing core server: alias sync, receipts, and usage logging (key-scoped, no users)"
 readme = "README.md"
 authors = [
@@ -50,9 +50,7 @@ allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/llmring_server"]
-
-[tool.hatch.build]
-include = [
+artifacts = [
   "src/llmring_server/migrations/*.sql",
   "src/llmring_server/py.typed",
 ]
