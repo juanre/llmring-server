@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [
     { name = "Juan Reyero", email = "juan@juanreyero.com" }
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.112",
     "uvicorn[standard]>=0.30",
@@ -28,7 +28,6 @@ classifiers = [
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
@@ -82,7 +81,7 @@ asyncio_default_fixture_loop_scope = "function"
 
 [tool.black]
 line-length = 100
-target-version = ['py310', 'py311', 'py312', 'py313']
+target-version = ['py311', 'py312', 'py313']
 include = '\.pyi?$'
 
 [tool.isort]
@@ -98,4 +97,4 @@ ensure_newline_before_comments = true
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
